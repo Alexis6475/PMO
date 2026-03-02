@@ -40,32 +40,7 @@ interface DraftItem {
 const OWNERS = ['SK', 'VF', 'Komeet', 'Mi4', 'JEMS'];
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-const SEED_TASKS: Record<string, Task[]> = {
-  CRM: [
-    { id: 'crm001', stream: 'CRM', title: 'Atelier de cadrage : Intégration Tunnel C5 x HubSpot', owner: 'Mi4', status: 'Done', priority: 'P0', dueDate: '2026-02-26', description: 'Scoping workshop' },
-    { id: 'crm002', stream: 'CRM', title: 'Dernière session démo fonctionnalités HubSpot (30min)', owner: 'Mi4', status: 'Not started', priority: 'P0', dueDate: '2026-03-03', description: '' },
-    { id: 'crm003', stream: 'CRM', title: 'Session Mi4 x JEMS – présentation flow documentation requirements', owner: 'Mi4', status: 'Not started', priority: 'P1', dueDate: '2026-03-05', description: '' },
-    { id: 'crm004', stream: 'CRM', title: 'Session Mi4 x Komeet – Databricks / HubSpot flows', owner: 'Mi4', status: 'Not started', priority: 'P1', dueDate: '', description: 'To be scheduled' },
-    { id: 'crm005', stream: 'CRM', title: 'Intégration avec autres partenaires (Workato, Databricks)', owner: '', status: 'Not started', priority: 'P2', dueDate: '', description: '' },
-    { id: 'crm006', stream: 'CRM', title: 'Validation du modèle de données', owner: 'Mi4', status: 'Done', priority: 'P0', dueDate: '2026-02-20', description: '' },
-    { id: 'crm007', stream: 'CRM', title: '2 sessions démo 30min fonctionnalités HubSpot', owner: 'Mi4', status: 'Done', priority: 'P1', dueDate: '2026-02-25', description: '24/02 – 25/02' },
-  ],
-  iPaaS: [
-    { id: 'ip001', stream: 'iPaaS', title: 'Continuation pilot flow documentation', owner: 'JEMS', status: 'In progress', priority: 'P0', dueDate: '', description: '' },
-    { id: 'ip002', stream: 'iPaaS', title: 'Continuation développement simple & medium flows', owner: 'JEMS', status: 'In progress', priority: 'P0', dueDate: '', description: '' },
-    { id: 'ip003', stream: 'iPaaS', title: 'Backlog workshops (IT & Business) – to be rescheduled', owner: '', status: 'Not started', priority: 'P0', dueDate: '', description: '⚠️ Showstopper' },
-    { id: 'ip004', stream: 'iPaaS', title: 'On-boarding JEMS x Workato – workshops to be scheduled', owner: 'VF', status: 'Not started', priority: 'P0', dueDate: '', description: '' },
-    { id: 'ip005', stream: 'iPaaS', title: 'Mi4 x JEMS – session flow documentation requirements', owner: 'Mi4', status: 'Not started', priority: 'P1', dueDate: '2026-03-05', description: '' },
-  ],
-  'Data Hub': [
-    { id: 'dh001', stream: 'Data Hub', title: 'Finalization interviews synthesis mapping', owner: 'Komeet', status: 'In progress', priority: 'P0', dueDate: '', description: '' },
-    { id: 'dh002', stream: 'Data Hub', title: 'Finalization use-cases and interaction mappings', owner: 'Komeet', status: 'Not started', priority: 'P0', dueDate: '', description: '' },
-    { id: 'dh003', stream: 'Data Hub', title: 'Initialization of target architecture', owner: 'Komeet', status: 'Not started', priority: 'P1', dueDate: '', description: '' },
-    { id: 'dh004', stream: 'Data Hub', title: 'Review Databricks Terms of Services', owner: 'VF', status: 'Not started', priority: 'P0', dueDate: '', description: '' },
-    { id: 'dh005', stream: 'Data Hub', title: 'All answers to key decision questions drafted', owner: 'Komeet', status: 'Done', priority: 'P0', dueDate: '2026-02-25', description: '' },
-  ],
-  'Control Tower': [],
-};
+const SEED_TASKS: Record<string, Task[]> = { CRM: [], iPaaS: [], 'Data Hub': [], 'Control Tower': [] };
 
 
 // ─── Roadmap seed data (from Excel PMO) ───
