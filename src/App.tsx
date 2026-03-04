@@ -643,19 +643,30 @@ export default function App() {
         </div>
       </div>
       {showConvert && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: '#fff', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,.15)', border: `1px solid ${C.border}`, minWidth: 210, overflow: 'hidden', marginTop: 4 }}>
-          <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', borderBottom: `1px solid ${C.border}` }}>Convert / Move to</div>
-          {convertOptions.map((opt, i) => (
-            <button key={i} onClick={opt.action}
-              style={{ width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.sectionBg}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'none'}>
-              <span>{opt.icon}</span><span>{opt.label}</span>
-            </button>
-          ))}
-          <button onClick={() => setShowConvert(false)}
-            style={{ width: '100%', padding: '7px 14px', background: '#fafafa', border: 'none', borderTop: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 11, color: C.textDim }}>Cancel</button>
-        </div>
+        <>
+          {/* Backdrop to close on outside click */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setShowConvert(false)} />
+          <div style={{ position: 'fixed', zIndex: 199, background: '#fff', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,.18)', border: `1px solid ${C.border}`, minWidth: 210, overflow: 'hidden' }}
+            ref={(el) => {
+              if (!el) return;
+              const rect = el.previousElementSibling?.previousElementSibling?.getBoundingClientRect?.() || el.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.bottom;
+              el.style.top = spaceBelow > 300 ? `${rect.bottom + 4}px` : `${rect.top - el.offsetHeight - 4}px`;
+              el.style.right = `${window.innerWidth - rect.right}px`;
+            }}>
+            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', borderBottom: `1px solid ${C.border}` }}>Convert / Move to</div>
+            {convertOptions.map((opt, i) => (
+              <button key={i} onClick={opt.action}
+                style={{ width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.sectionBg}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'none'}>
+                <span>{opt.icon}</span><span>{opt.label}</span>
+              </button>
+            ))}
+            <button onClick={() => setShowConvert(false)}
+              style={{ width: '100%', padding: '7px 14px', background: '#fafafa', border: 'none', borderTop: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 11, color: C.textDim }}>Cancel</button>
+          </div>
+        </>
       )}
     </div>
     );
@@ -1823,35 +1834,39 @@ export default function App() {
 
     const [status, setStatus] = useState<'On track' | 'Delayed' | 'Showstopper'>('On track');
     const [stage, setStage] = useState('Design');
+    const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set());
+    const toggleHide = (key: string) => setHiddenItems(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-    // Last Thursday (inclusive of today if today is Thursday)
-    const lastThursday = (() => {
+    // Next Thursday = the coming presentation Thursday (today if today IS Thursday)
+    const nextThursday = (() => {
       const d = new Date();
       const day = d.getDay(); // 0=Sun, 4=Thu
-      const daysBack = day >= 4 ? day - 4 : day + 3;
-      d.setDate(d.getDate() - daysBack);
+      const daysAhead = day === 4 ? 0 : (4 - day + 7) % 7;
+      d.setDate(d.getDate() + daysAhead);
+      d.setHours(0,0,0,0);
       return d.toISOString().split('T')[0];
     })();
-    // Thursday before that
+    // Last Thursday = the Thursday just before next Thursday (the previous presentation)
+    const lastThursday = (() => {
+      const d = new Date(nextThursday + 'T12:00:00');
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().split('T')[0];
+    })();
+    // Thursday before that = start of past-week window
     const prevThursday = (() => {
       const d = new Date(lastThursday + 'T12:00:00');
       d.setDate(d.getDate() - 7);
       return d.toISOString().split('T')[0];
     })();
-    // Next Thursday
-    const nextThursday = (() => {
-      const d = new Date(lastThursday + 'T12:00:00');
-      d.setDate(d.getDate() + 7);
-      return d.toISOString().split('T')[0];
-    })();
+    const todaySlide = new Date().toISOString().split('T')[0];
 
-    // Past week = Done tasks with dueDate between prev Thursday and last Thursday
+    // Past week = Done tasks with dueDate in [lastThursday-7 .. lastThursday]
     const doneTasks = tasks.filter(t =>
-      t.status === 'Done' && t.dueDate && t.dueDate >= prevThursday && t.dueDate <= lastThursday
+      t.status === 'Done' && t.dueDate && t.dueDate > prevThursday && t.dueDate <= lastThursday
     );
-    // Coming week = not Done tasks with dueDate before next Thursday, sorted P0 first
+    // Coming week = not Done tasks due today OR before next Thursday (inclusive)
     const upcomingTasks = [...tasks.filter(t =>
-      t.status !== 'Done' && t.dueDate && t.dueDate <= nextThursday
+      t.status !== 'Done' && t.dueDate && t.dueDate >= todaySlide && t.dueDate <= nextThursday
     )].sort((a, b) => ['P0','P1','P2',''].indexOf(a.priority) - ['P0','P1','P2',''].indexOf(b.priority));
 
     const risks = items.potentialRisks;
@@ -1917,7 +1932,19 @@ export default function App() {
             </div>
             {doneTasks.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No tasks completed this period — mark tasks as Done with a due date to see them here.</div>
-              : doneTasks.map(t => <Row key={t.id} icon="✓" text={t.title} owner={t.owner} />)
+              : doneTasks.map(t => {
+                  const hidden = hiddenItems.has('done-' + t.id);
+                  return (
+                    <div key={t.id} onClick={() => toggleHide('done-' + t.id)}
+                      style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start', cursor: 'pointer', opacity: hidden ? 0.3 : 1, transition: 'opacity .15s', userSelect: 'none' }}
+                      title={hidden ? 'Click to show' : 'Click to hide'}>
+                      <span style={{ flexShrink: 0, marginTop: 1, color: '#34c759' }}>✓</span>
+                      <span style={{ fontSize: 13, color: C.text, lineHeight: 1.4, textDecoration: hidden ? 'line-through' : 'none' }}>
+                        {t.title}{t.owner && <span style={{ color: C.textMuted }}> · {t.owner}</span>}
+                      </span>
+                    </div>
+                  );
+                })
             }
           </div>
 
@@ -1929,9 +1956,19 @@ export default function App() {
             </div>
             {upcomingTasks.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No upcoming tasks with a due date before next Thursday.</div>
-              : upcomingTasks.map(t => (
-                  <Row key={t.id} icon={t.priority === 'P0' ? '!' : '•'} text={t.title} owner={t.owner} highlight={t.priority === 'P0' && !!t.dueDate && t.dueDate < todayStr()} />
-                ))
+              : upcomingTasks.map(t => {
+                  const hidden = hiddenItems.has('up-' + t.id);
+                  return (
+                    <div key={t.id} onClick={() => setHiddenItems(s => { const n = new Set(s); n.has('up-'+t.id) ? n.delete('up-'+t.id) : n.add('up-'+t.id); return n; })}
+                      style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start', cursor: 'pointer', opacity: hidden ? 0.3 : 1, transition: 'opacity .15s', userSelect: 'none' }}
+                      title={hidden ? 'Click to show' : 'Click to hide'}>
+                      <span style={{ flexShrink: 0, marginTop: 1, color: t.priority === 'P0' ? C.danger : color }}>{t.priority === 'P0' ? '!' : '•'}</span>
+                      <span style={{ fontSize: 13, color: t.priority === 'P0' && !hidden && !!t.dueDate && t.dueDate < todaySlide ? C.danger : C.text, fontWeight: t.priority === 'P0' ? 600 : 400, lineHeight: 1.4, textDecoration: hidden ? 'line-through' : 'none' }}>
+                        {t.title}{t.owner && <span style={{ color: C.textMuted, fontWeight: 400 }}> · {t.owner}</span>}
+                      </span>
+                    </div>
+                  );
+                })
             }
           </div>
 
@@ -1940,17 +1977,20 @@ export default function App() {
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>💬 To be discussed</div>
             {toDiscuss.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>Nothing to discuss — add items in Stream Management.</div>
-              : toDiscuss.map(item => (
-                  <div key={item.id} style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ color: C.textMuted, flexShrink: 0 }}>■</span>
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.title}</span>
-                        {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+              : toDiscuss.map(item => {
+                  const hidden = hiddenItems.has('tbd-' + item.id);
+                  return (
+                    <div key={item.id} style={{ marginBottom: 6, cursor: 'pointer', opacity: hidden ? 0.3 : 1, transition: 'opacity .15s', userSelect: 'none' }} onClick={() => toggleHide('tbd-' + item.id)} title={hidden ? 'Click to show' : 'Click to hide'}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span style={{ color: C.textMuted, flexShrink: 0 }}>■</span>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textDecoration: hidden ? 'line-through' : 'none' }}>{item.title}</span>
+                          {!hidden && item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
             }
           </div>
 
@@ -1959,18 +1999,21 @@ export default function App() {
             <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 10 }}>⚠️ Risks</div>
             {risks.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No risks identified — add risks in Stream Management.</div>
-              : risks.map(item => (
-                  <div key={item.id} style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ color: C.danger, flexShrink: 0 }}>ℹ</span>
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: item.owner ? 600 : 400, color: C.text }}>{item.title}</span>
-                        {item.owner && <span style={{ fontSize: 12, color: C.textMuted }}> · {item.owner}</span>}
-                        {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+              : risks.map(item => {
+                  const hidden = hiddenItems.has('risk-' + item.id);
+                  return (
+                    <div key={item.id} style={{ marginBottom: 6, cursor: 'pointer', opacity: hidden ? 0.3 : 1, transition: 'opacity .15s', userSelect: 'none' }} onClick={() => toggleHide('risk-' + item.id)} title={hidden ? 'Click to show' : 'Click to hide'}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span style={{ color: C.danger, flexShrink: 0 }}>ℹ</span>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: item.owner ? 600 : 400, color: C.text, textDecoration: hidden ? 'line-through' : 'none' }}>{item.title}</span>
+                          {item.owner && !hidden && <span style={{ fontSize: 12, color: C.textMuted }}> · {item.owner}</span>}
+                          {!hidden && item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
             }
           </div>
         </div>
