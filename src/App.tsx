@@ -305,10 +305,17 @@ export default function App() {
 
 
 
+  const EXPORT_KEY = 'vattenfall-nova-last-export';
+  const getLastExport = () => { try { return localStorage.getItem(EXPORT_KEY) || ''; } catch { return ''; } };
+  const [lastExport, setLastExport] = useState<string>(getLastExport());
+
   const handleExport = () => {
     if (!data) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `nova-data-${todayStr()}.json`; a.click(); URL.revokeObjectURL(url);
+    const today = todayStr();
+    localStorage.setItem(EXPORT_KEY, today);
+    setLastExport(today);
   };
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -1814,19 +1821,52 @@ export default function App() {
     const items = data.streamItems[stream] || { toBeDiscussed: [], potentialRisks: [] };
     const decisions = data.decisions[stream] || [];
 
-    // Editable fields stored in a local state, pre-filled from data
     const [status, setStatus] = useState<'On track' | 'Delayed' | 'Showstopper'>('On track');
     const [stage, setStage] = useState('Design');
-    const [pastWeek, setPastWeek] = useState('');
-    const [comingWeek, setComingWeek] = useState('');
 
-    const doneTasks = tasks.filter(t => t.status === 'Done' && t.completedAt && t.completedAt >= (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })());
-    const upcomingTasks = tasks.filter(t => t.status !== 'Done' && (t.priority === 'P0' || t.priority === 'P1'));
+    // Last Thursday (inclusive of today if today is Thursday)
+    const lastThursday = (() => {
+      const d = new Date();
+      const day = d.getDay(); // 0=Sun, 4=Thu
+      const daysBack = day >= 4 ? day - 4 : day + 3;
+      d.setDate(d.getDate() - daysBack);
+      return d.toISOString().split('T')[0];
+    })();
+    // Thursday before that
+    const prevThursday = (() => {
+      const d = new Date(lastThursday + 'T12:00:00');
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().split('T')[0];
+    })();
+    // Next Thursday
+    const nextThursday = (() => {
+      const d = new Date(lastThursday + 'T12:00:00');
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    })();
+
+    // Past week = Done tasks with dueDate between prev Thursday and last Thursday
+    const doneTasks = tasks.filter(t =>
+      t.status === 'Done' && t.dueDate && t.dueDate >= prevThursday && t.dueDate <= lastThursday
+    );
+    // Coming week = not Done tasks with dueDate before next Thursday, sorted P0 first
+    const upcomingTasks = [...tasks.filter(t =>
+      t.status !== 'Done' && t.dueDate && t.dueDate <= nextThursday
+    )].sort((a, b) => ['P0','P1','P2',''].indexOf(a.priority) - ['P0','P1','P2',''].indexOf(b.priority));
+
     const risks = items.potentialRisks;
     const toDiscuss = items.toBeDiscussed;
-
     const statusColors: Record<string, string> = { 'On track': '#34c759', 'Delayed': '#ff9f0a', 'Showstopper': '#ff3b30' };
     const statusOptions: Array<'On track' | 'Delayed' | 'Showstopper'> = ['On track', 'Delayed', 'Showstopper'];
+
+    const Row = ({ icon, text, owner, highlight }: { icon: string; text: string; owner?: string; highlight?: boolean }) => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, marginTop: 1 }}>{icon}</span>
+        <span style={{ fontSize: 13, color: highlight ? C.danger : C.text, fontWeight: highlight ? 600 : 400, lineHeight: 1.4 }}>
+          {text}{owner && <span style={{ color: C.textMuted, fontWeight: 400 }}> · {owner}</span>}
+        </span>
+      </div>
+    );
 
     return (
       <div style={{ background: '#fff', borderRadius: 16, border: `2px solid ${color}30`, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.08)' }}>
@@ -1845,7 +1885,7 @@ export default function App() {
         </div>
 
         {/* Status bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: `1px solid ${C.border}`, background: '#f7f7f7' }}>
+        <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: '#f7f7f7' }}>
           <div style={{ padding: '10px 16px', borderRight: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
@@ -1867,52 +1907,47 @@ export default function App() {
           </div>
         </div>
 
-        {/* 4-quadrant grid */}
+        {/* 4-quadrant grid — read-only, data-driven */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
           {/* Past week */}
-          <div style={{ padding: 16, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ padding: 16, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, minHeight: 160 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>
               ✅ Activities of the past week
-              {doneTasks.length > 0 && <span style={{ fontSize: 10, color: C.textMuted }}>({doneTasks.length} tasks done)</span>}
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>{fmtDate(prevThursday)} → {fmtDate(lastThursday)}</span>
             </div>
-            {doneTasks.length > 0 && (
-              <div style={{ marginBottom: 8 }}>
-                {doneTasks.slice(0, 4).map(t => (
-                  <div key={t.id} style={{ fontSize: 12, color: '#34c759', display: 'flex', gap: 6, marginBottom: 3 }}>
-                    <span>✓</span><span style={{ color: C.text }}>{t.title}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <RichEditor value={pastWeek} onChange={setPastWeek} placeholder="Add context on past week activities…" minHeight={80} />
+            {doneTasks.length === 0
+              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No tasks completed this period — mark tasks as Done with a due date to see them here.</div>
+              : doneTasks.map(t => <Row key={t.id} icon="✓" text={t.title} owner={t.owner} />)
+            }
           </div>
 
           {/* Coming week */}
-          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, minHeight: 160 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>
               📅 Activities in the coming week
-              {upcomingTasks.length > 0 && <span style={{ fontSize: 10, color: C.textMuted }}>({upcomingTasks.length} open P0/P1)</span>}
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>due before {fmtDate(nextThursday)}</span>
             </div>
-            {upcomingTasks.slice(0, 4).map(t => (
-              <div key={t.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 3, alignItems: 'flex-start' }}>
-                <span style={{ color: color, flexShrink: 0 }}>•</span>
-                <span>{t.title}{t.owner ? <span style={{ color: C.textMuted }}> · {t.owner}</span> : null}</span>
-              </div>
-            ))}
-            <RichEditor value={comingWeek} onChange={setComingWeek} placeholder="Add context on upcoming activities…" minHeight={80} />
+            {upcomingTasks.length === 0
+              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No upcoming tasks with a due date before next Thursday.</div>
+              : upcomingTasks.map(t => (
+                  <Row key={t.id} icon={t.priority === 'P0' ? '!' : '•'} text={t.title} owner={t.owner} highlight={t.priority === 'P0' && !!t.dueDate && t.dueDate < todayStr()} />
+                ))
+            }
           </div>
 
           {/* To be discussed */}
-          <div style={{ padding: 16, borderRight: `1px solid ${C.border}` }}>
+          <div style={{ padding: 16, borderRight: `1px solid ${C.border}`, minHeight: 120 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>💬 To be discussed</div>
             {toDiscuss.length === 0
-              ? <div style={{ fontSize: 12, color: C.textDim }}>Nothing to discuss</div>
+              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>Nothing to discuss — add items in Stream Management.</div>
               : toDiscuss.map(item => (
-                  <div key={item.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 4 }}>
-                    <span style={{ color: C.textMuted }}>■</span>
-                    <div>
-                      <span style={{ fontWeight: 600 }}>{item.title}</span>
-                      {item.description && <div style={{ fontSize: 11, color: C.textMuted }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                  <div key={item.id} style={{ marginBottom: 6 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ color: C.textMuted, flexShrink: 0 }}>■</span>
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.title}</span>
+                        {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1920,16 +1955,19 @@ export default function App() {
           </div>
 
           {/* Risks */}
-          <div style={{ padding: 16 }}>
+          <div style={{ padding: 16, minHeight: 120 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 10 }}>⚠️ Risks</div>
             {risks.length === 0
-              ? <div style={{ fontSize: 12, color: C.textDim }}>No risks identified</div>
+              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No risks identified — add risks in Stream Management.</div>
               : risks.map(item => (
-                  <div key={item.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 4 }}>
-                    <span style={{ color: C.danger, flexShrink: 0 }}>ℹ</span>
-                    <div>
-                      <span style={{ fontWeight: item.owner ? 700 : 400 }}>{item.title}</span>
-                      {item.description && <div style={{ fontSize: 11, color: C.textMuted }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                  <div key={item.id} style={{ marginBottom: 6 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ color: C.danger, flexShrink: 0 }}>ℹ</span>
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: item.owner ? 600 : 400, color: C.text }}>{item.title}</span>
+                        {item.owner && <span style={{ fontSize: 12, color: C.textMuted }}> · {item.owner}</span>}
+                        {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -2105,7 +2143,21 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-<button className="bg" style={{ fontSize: 12 }} onClick={handleExport}>↓ Export</button>
+{(() => {
+              const daysSince = lastExport ? Math.floor((new Date().getTime() - new Date(lastExport + 'T12:00:00').getTime()) / 86400000) : 999;
+              const alert3 = daysSince >= 3;
+              return (
+                <div style={{ position: 'relative' }}>
+                  <button className="bg" style={{ fontSize: 12, border: alert3 ? '1.5px solid #ff9f0a' : undefined, color: alert3 ? '#ff9f0a' : undefined, fontWeight: alert3 ? 700 : undefined }}
+                    onClick={handleExport} title={lastExport ? `Last export: ${fmtDate(lastExport)} (${daysSince}d ago)` : 'Never exported — export now!'}>
+                    {alert3 ? '⚠ ' : ''}↓ Export
+                  </button>
+                  {alert3 && (
+                    <div style={{ position: 'absolute', top: -6, right: -6, width: 10, height: 10, borderRadius: '50%', background: '#ff9f0a', border: '2px solid #fff' }} />
+                  )}
+                </div>
+              );
+            })()}
           <button className="bg" style={{ fontSize: 12 }} onClick={() => importRef.current?.click()}>↑ Import</button>
           <div style={{ display: 'flex', background: C.sectionBg, borderRadius: 10, padding: 3, border: `1px solid ${C.border}`, gap: 1 }}>
             {VIEWS.map(v => (
