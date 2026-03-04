@@ -553,6 +553,7 @@ export default function App() {
   const Kanban = ({ stream }: { stream: Stream }) => {
     const [dragId, setDragId] = useState<string | null>(null);
     const [dragOver, setDragOver] = useState<Status | null>(null);
+    const [showOldDone, setShowOldDone] = useState(false);
 
     const handleDragStart = (id: string) => setDragId(id);
     const handleDragEnd = () => { setDragId(null); setDragOver(null); };
@@ -562,10 +563,17 @@ export default function App() {
       setDragId(null); setDragOver(null);
     };
 
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
         {STATUSES.map(status => {
-          const col = (data.tasks[stream] || []).filter(t => t.status === status);
+          const allCol = (data.tasks[stream] || []).filter(t => t.status === status);
+          // For Done: split recent (< 1 week) vs old (>= 1 week)
+          const recentDone = status === 'Done' ? allCol.filter(t => !t.dueDate || t.dueDate >= oneWeekAgoStr) : allCol;
+          const oldDone = status === 'Done' ? allCol.filter(t => t.dueDate && t.dueDate < oneWeekAgoStr) : [];
+          const col = recentDone;
           const dotColor = { 'Not started': C.notStarted, 'In progress': C.inProgress, Done: C.done }[status];
           const isOver = dragOver === status;
           return (
@@ -579,7 +587,7 @@ export default function App() {
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.4px' }}>{status}</span>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: C.textDim, background: C.bg, padding: '1px 7px', borderRadius: 8 }}>{col.length}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.textDim, background: C.bg, padding: '1px 7px', borderRadius: 8 }}>{allCol.length}</span>
               </div>
               <div style={{ padding: 8, minHeight: 80 }}>
                 {col.map(t => (
@@ -589,6 +597,25 @@ export default function App() {
                   </div>
                 ))}
                 {isOver && dragId && <div style={{ height: 3, borderRadius: 3, background: streamColor(stream), margin: '4px 0' }} />}
+                {status === 'Done' && oldDone.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <button onClick={() => setShowOldDone(v => !v)}
+                      style={{ width: '100%', background: '#f5f5f7', border: `1px dashed ${C.border}`, borderRadius: 8, padding: '5px 10px', fontSize: 11, color: C.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>🗂 Archived ({oldDone.length})</span>
+                      <span>{showOldDone ? '▲' : '▼'}</span>
+                    </button>
+                    {showOldDone && (
+                      <div style={{ marginTop: 4, opacity: 0.65 }}>
+                        {oldDone.map(t => (
+                          <div key={t.id} draggable onDragStart={() => handleDragStart(t.id)} onDragEnd={handleDragEnd}
+                            style={{ opacity: dragId === t.id ? 0.4 : 1, cursor: 'grab' }}>
+                            <TaskCard task={t} stream={stream} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -985,7 +1012,7 @@ export default function App() {
               <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Status</label><select className="ni" value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Status })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
               <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Priority</label><select className="ni" value={form.priority || ''} onChange={e => setForm({ ...form, priority: e.target.value as Priority })}><option value="">None</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></div>
             </div>
-            <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Notes</label><textarea className="ni" value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Add context…" /></div>
+            <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Notes</label><RichEditor value={form.description || ''} onChange={v => setForm({ ...form, description: v })} placeholder="Add context…" minHeight={120} /></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
               <DelBtn onClick={() => { deleteTask(stream, task.id); setTaskModal(null); }} label="this task" />
               <button className="bp" onClick={() => { updateTask(stream, task.id, form); setTaskModal(null); }}>Save changes</button>
@@ -1034,6 +1061,7 @@ export default function App() {
             const dayTasks = allTasks.filter(t => {
               if (t.dueDate !== ds) return false;
               if (t.priority === 'P2' || !t.priority) return false;
+              if (t.status === 'Done') return false;
               if (myTasks && !t.owner.includes('SK')) return false;
               return true;
             });
