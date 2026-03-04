@@ -5,9 +5,9 @@ type Status = 'Not started' | 'In progress' | 'Done';
 type Priority = 'P0' | 'P1' | 'P2' | '';
 type Stream = 'Control Tower' | 'CRM' | 'iPaaS' | 'Data Hub';
 
-interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; completedAt?: string; recurring?: 'weekly'; }
+interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; completedAt?: string; recurring?: 'weekly'; linkedDecisionIds?: string[]; }
 interface Note { id: string; title: string; description: string; }
-interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; decided: boolean; }
+interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; decided: boolean; linkedTaskIds?: string[]; }
 interface MeetingNote { id: string; title: string; date: string; content: string; photos?: string[]; }
 interface StreamItem { id: string; title: string; owner: string; dueDate: string; description: string; }
 interface InboxCR { id: string; title: string; date: string; content: string; source?: string; }
@@ -249,6 +249,8 @@ export default function App() {
   const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [weekOffset, setWeekOffset] = useState(0);
+  const [slideMode, setSlideMode] = useState<Stream | null>(null);
+  const [expressNote, setExpressNote] = useState<{ content: string; date: string } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
 
@@ -630,6 +632,7 @@ export default function App() {
           {task.priority && <PriorityBadge priority={task.priority} />}
           {task.dueDate && <span style={{ fontSize: 11, color: isOverdue ? C.danger : C.textDim, fontWeight: isOverdue ? 600 : 400 }}>{isOverdue ? '⚠ ' : ''}{fmtDate(task.dueDate)}</span>}
           {task.recurring === 'weekly' && <span style={{ fontSize: 10, color: C.accent, background: C.accent+'15', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🔁 weekly</span>}
+          {(task.linkedDecisionIds?.length || 0) > 0 && <span style={{ fontSize: 10, color: '#5856d6', background: '#5856d615', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🔗 {task.linkedDecisionIds!.length} dec.</span>}
         </div>
       </div>
       {showConvert && (
@@ -1132,6 +1135,28 @@ export default function App() {
                 🔁 Repeat weekly {form.recurring === 'weekly' ? '· ON' : '· OFF'}
               </button>
             </div>
+            {/* Linked decisions */}
+            {(() => {
+              const streamDecisions = data.decisions[stream] || [];
+              if (!streamDecisions.length) return null;
+              const linked = form.linkedDecisionIds || [];
+              return (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>🔗 Linked to decision</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {streamDecisions.map(d => {
+                      const sel = linked.includes(d.id);
+                      return (
+                        <button key={d.id} onClick={() => setForm({ ...form, linkedDecisionIds: sel ? linked.filter(x => x !== d.id) : [...linked, d.id] })}
+                          style={{ padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${sel ? C.accent : C.border}`, background: sel ? C.accent+'15' : '#fff', color: sel ? C.accent : C.textMuted, transition: 'all .15s' }}>
+                          {sel ? '✓ ' : ''}{d.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
             <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Notes</label><RichEditor value={form.description || ''} onChange={v => setForm({ ...form, description: v })} placeholder="Add context…" minHeight={120} /></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
               <DelBtn onClick={() => { deleteTask(stream, task.id); setTaskModal(null); }} label="this task" />
@@ -1169,6 +1194,10 @@ export default function App() {
           <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{weekLabel}</span>
           <button className="bg" onClick={() => setWeekOffset(w => w + 1)}>→</button>
           {weekOffset !== 0 && <button className="bg" onClick={() => setWeekOffset(0)}>Today</button>}
+          <button onClick={() => setExpressNote({ content: '', date: todayStr() })}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px', borderRadius: 10, border: `1.5px solid ${C.accent}`, background: C.accent+'12', color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ⚡ Notes express
+          </button>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 12, color: C.textMuted }}>My tasks (SK)</span>
             <div onClick={() => setMyTasks(m => !m)} style={{ width: 38, height: 22, borderRadius: 11, background: myTasks ? C.accent : '#d1d1d6', cursor: 'pointer', position: 'relative', transition: 'background .2s' }}>
@@ -1248,69 +1277,80 @@ export default function App() {
         </div>
 
         {/* ── 📥 CRs to Categorize ── */}
-        {(()  => {
-          const inbox = data.inboxCRs || [];
-
-          const handleCRFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = ev => {
-              const text = ev.target?.result as string;
-              setCrContent(text);
-              setCrTitle(file.name.replace(/\.[^.]+$/, ''));
-            };
-            reader.readAsText(file);
-            e.target.value = '';
-          };
-
-          const submitCR = () => {
-            if (!crTitle.trim()) return;
-            addInboxCR({ title: crTitle.trim(), date: todayStr(), content: crContent, source: 'manual' });
-            setCrTitle(''); setCrContent(''); setShowCRImport(false);
-          };
-
-          const assignCR = (cr: InboxCR, stream: Stream) => {
-            addMeeting(stream, { title: cr.title, date: cr.date, content: cr.content });
-            deleteInboxCR(cr.id);
-          };
-
-          return (
-            <div className="card" style={{ marginBottom: 16 }}>
-              <CardHeader
-                title={<>📥 CRs to categorize {inbox.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: '#ff9f0a18', color: '#ff9f0a' }}>{inbox.length}</span>}</>}
-                action={<button className="bg" onClick={() => setShowCRImport(v => !v)}>{showCRImport ? 'Cancel' : '+ Import CR'}</button>}
-              />
-              {showCRImport && (
-                <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input className="ni" style={{ flex: 2 }} placeholder="CR title…" value={crTitle} onChange={e => setCrTitle(e.target.value)} />
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 12, color: C.textMuted, background: C.sectionBg, whiteSpace: 'nowrap' }}>
-                      📎 Upload file (txt/md)
-                      <input type="file" accept=".txt,.md,.text" style={{ display: 'none' }} onChange={handleCRFile} />
-                    </label>
-                  </div>
-                  <RichEditor value={crContent} onChange={setCrContent} placeholder="Or paste your CR content here… (text, bullets, etc.)" minHeight={120} />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <button className="bp" onClick={submitCR}>Add to inbox</button>
-                  </div>
-                </div>
-              )}
-              {inbox.length === 0
-                ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>No CRs to categorize — import a meeting note to assign it to a stream.</div>
-                : inbox.map(cr => (
-                    <div key={cr.id} style={{ borderTop: `1px solid ${C.border}` }}>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <CardHeader
+            title={<>📥 CRs to categorize {(data.inboxCRs||[]).length > 0 && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: '#ff9f0a18', color: '#ff9f0a' }}>{(data.inboxCRs||[]).length}</span>}</>}
+            action={<button className="bg" onClick={() => { setShowCRImport(v => !v); setCrTitle(''); setCrContent(''); setOpenCRId(null); }}>{showCRImport ? 'Cancel' : '+ Import CR'}</button>}
+          />
+          {showCRImport && (
+            <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input className="ni" style={{ flex: 2 }} placeholder="CR title…" value={crTitle} onChange={e => setCrTitle(e.target.value)} autoFocus />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 12, color: C.textMuted, background: C.sectionBg, whiteSpace: 'nowrap' }}>
+                  📎 Upload .txt/.md
+                  <input type="file" accept=".txt,.md,.text" style={{ display: 'none' }} onChange={(e) => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => { setCrContent(ev.target?.result as string || ''); setCrTitle(t => t || file.name.replace(/\.[^.]+$/, '')); };
+                    reader.readAsText(file); e.target.value = '';
+                  }} />
+                </label>
+              </div>
+              <RichEditor value={crContent} onChange={setCrContent} placeholder="Ou colle ton CR ici… (texte, bullets, etc.)" minHeight={120} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="bp" onClick={() => {
+                  if (!crTitle.trim()) return;
+                  addInboxCR({ title: crTitle.trim(), date: todayStr(), content: crContent, source: 'manual' });
+                  setCrTitle(''); setCrContent(''); setShowCRImport(false);
+                }}>Add to inbox</button>
+              </div>
+            </div>
+          )}
+          {(data.inboxCRs||[]).length === 0 && !showCRImport
+            ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>Aucun CR à catégoriser — importe une note de réunion pour l'assigner à un stream.</div>
+            : (data.inboxCRs||[]).map(cr => (
+                <div key={cr.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  {/* Edit mode */}
+                  {openCRId === cr.id + '_edit' ? (
+                    <div style={{ padding: 14, background: C.sectionBg, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input className="ni" value={cr.title} onChange={e => {
+                        const updated = (data.inboxCRs||[]).map(c => c.id === cr.id ? { ...c, title: e.target.value } : c);
+                        save({ ...data, inboxCRs: updated });
+                      }} />
+                      <RichEditor value={cr.content} onChange={v => {
+                        const updated = (data.inboxCRs||[]).map(c => c.id === cr.id ? { ...c, content: v } : c);
+                        save({ ...data, inboxCRs: updated });
+                      }} placeholder="Contenu du CR…" minHeight={150} />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button className="bg" onClick={() => setOpenCRId(null)}>Done</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                       <div style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cr.title}</div>
                           <div style={{ fontSize: 11, color: C.textMuted }}>{fmtDate(cr.date)}</div>
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <button onClick={() => setOpenCRId(openCRId === cr.id ? null : cr.id)} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.sectionBg, cursor: 'pointer', color: C.textMuted }}>
-                            {openCRId === cr.id ? 'Hide' : 'Read'}
+                          <button onClick={() => setOpenCRId(openCRId === cr.id ? null : cr.id)}
+                            style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.sectionBg, cursor: 'pointer', color: C.textMuted }}>
+                            {openCRId === cr.id ? 'Fermer' : 'Lire'}
                           </button>
+                          <button onClick={() => setOpenCRId(cr.id + '_edit')}
+                            style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.sectionBg, cursor: 'pointer', color: C.textMuted }}>✏️</button>
                           <span style={{ fontSize: 11, color: C.textMuted }}>→</span>
                           {STREAMS.map(s => (
-                            <button key={s} onClick={() => assignCR(cr, s)}
+                            <button key={s} onClick={() => {
+                              // Fix: atomic save — add meeting AND remove CR in one operation
+                              const newMeeting = { id: uid(), title: cr.title, date: cr.date, content: cr.content };
+                              const newData = {
+                                ...data,
+                                meetings: { ...data.meetings, [s]: [...(data.meetings[s]||[]), newMeeting] },
+                                inboxCRs: (data.inboxCRs||[]).filter(c => c.id !== cr.id)
+                              };
+                              save(newData);
+                            }}
                               style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1.5px solid ${streamColor(s)}40`, background: streamColor(s)+'12', color: streamColor(s), cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
                               {s}
                             </button>
@@ -1321,12 +1361,12 @@ export default function App() {
                       {openCRId === cr.id && (
                         <div style={{ padding: '0 16px 14px', fontSize: 13, color: C.text, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: cr.content }} />
                       )}
-                    </div>
-                  ))
-              }
-            </div>
-          );
-        })()}
+                    </>
+                  )}
+                </div>
+              ))
+          }
+        </div>
 
         {/* ── Decisions: overdue pending + this week ── */}
         {(() => {
@@ -1766,12 +1806,172 @@ export default function App() {
   };
 
 
+
+  // ─── Slide View (project status per stream) ───
+  const SlideView = ({ stream }: { stream: Stream }) => {
+    const color = streamColor(stream);
+    const tasks = data.tasks[stream] || [];
+    const items = data.streamItems[stream] || { toBeDiscussed: [], potentialRisks: [] };
+    const decisions = data.decisions[stream] || [];
+
+    // Editable fields stored in a local state, pre-filled from data
+    const [status, setStatus] = useState<'On track' | 'Delayed' | 'Showstopper'>('On track');
+    const [stage, setStage] = useState('Design');
+    const [pastWeek, setPastWeek] = useState('');
+    const [comingWeek, setComingWeek] = useState('');
+
+    const doneTasks = tasks.filter(t => t.status === 'Done' && t.completedAt && t.completedAt >= (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })());
+    const upcomingTasks = tasks.filter(t => t.status !== 'Done' && (t.priority === 'P0' || t.priority === 'P1'));
+    const risks = items.potentialRisks;
+    const toDiscuss = items.toBeDiscussed;
+
+    const statusColors: Record<string, string> = { 'On track': '#34c759', 'Delayed': '#ff9f0a', 'Showstopper': '#ff3b30' };
+    const statusOptions: Array<'On track' | 'Delayed' | 'Showstopper'> = ['On track', 'Delayed', 'Showstopper'];
+
+    return (
+      <div style={{ background: '#fff', borderRadius: 16, border: `2px solid ${color}30`, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.08)' }}>
+        {/* Header */}
+        <div style={{ background: color, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '.2px' }}>Project status: {stream}</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input value={stage} onChange={e => setStage(e.target.value)}
+              style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.4)', borderRadius: 8, padding: '4px 10px', fontSize: 12, color: '#fff', fontWeight: 600, width: 120 }}
+              placeholder="Stage…" />
+            <button onClick={() => setSlideMode(null)}
+              style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.4)', borderRadius: 8, padding: '4px 12px', fontSize: 12, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+              ✕ Close slide
+            </button>
+          </div>
+        </div>
+
+        {/* Status bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: `1px solid ${C.border}`, background: '#f7f7f7' }}>
+          <div style={{ padding: '10px 16px', borderRight: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+          </div>
+          <div style={{ padding: '10px 16px', borderRight: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Status (SK eval.)</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              {statusOptions.map(s => (
+                <button key={s} onClick={() => setStatus(s)}
+                  style={{ padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${status === s ? statusColors[s] : C.border}`, background: status === s ? statusColors[s] : '#fff', color: status === s ? '#fff' : C.textMuted, transition: 'all .15s' }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: '10px 16px', marginLeft: 'auto' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Stage</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: color }}>{stage}</div>
+          </div>
+        </div>
+
+        {/* 4-quadrant grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+          {/* Past week */}
+          <div style={{ padding: 16, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              ✅ Activities of the past week
+              {doneTasks.length > 0 && <span style={{ fontSize: 10, color: C.textMuted }}>({doneTasks.length} tasks done)</span>}
+            </div>
+            {doneTasks.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {doneTasks.slice(0, 4).map(t => (
+                  <div key={t.id} style={{ fontSize: 12, color: '#34c759', display: 'flex', gap: 6, marginBottom: 3 }}>
+                    <span>✓</span><span style={{ color: C.text }}>{t.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <RichEditor value={pastWeek} onChange={setPastWeek} placeholder="Add context on past week activities…" minHeight={80} />
+          </div>
+
+          {/* Coming week */}
+          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              📅 Activities in the coming week
+              {upcomingTasks.length > 0 && <span style={{ fontSize: 10, color: C.textMuted }}>({upcomingTasks.length} open P0/P1)</span>}
+            </div>
+            {upcomingTasks.slice(0, 4).map(t => (
+              <div key={t.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 3, alignItems: 'flex-start' }}>
+                <span style={{ color: color, flexShrink: 0 }}>•</span>
+                <span>{t.title}{t.owner ? <span style={{ color: C.textMuted }}> · {t.owner}</span> : null}</span>
+              </div>
+            ))}
+            <RichEditor value={comingWeek} onChange={setComingWeek} placeholder="Add context on upcoming activities…" minHeight={80} />
+          </div>
+
+          {/* To be discussed */}
+          <div style={{ padding: 16, borderRight: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>💬 To be discussed</div>
+            {toDiscuss.length === 0
+              ? <div style={{ fontSize: 12, color: C.textDim }}>Nothing to discuss</div>
+              : toDiscuss.map(item => (
+                  <div key={item.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 4 }}>
+                    <span style={{ color: C.textMuted }}>■</span>
+                    <div>
+                      <span style={{ fontWeight: 600 }}>{item.title}</span>
+                      {item.description && <div style={{ fontSize: 11, color: C.textMuted }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                    </div>
+                  </div>
+                ))
+            }
+          </div>
+
+          {/* Risks */}
+          <div style={{ padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 10 }}>⚠️ Risks</div>
+            {risks.length === 0
+              ? <div style={{ fontSize: 12, color: C.textDim }}>No risks identified</div>
+              : risks.map(item => (
+                  <div key={item.id} style={{ fontSize: 12, color: C.text, display: 'flex', gap: 6, marginBottom: 4 }}>
+                    <span style={{ color: C.danger, flexShrink: 0 }}>ℹ</span>
+                    <div>
+                      <span style={{ fontWeight: item.owner ? 700 : 400 }}>{item.title}</span>
+                      {item.description && <div style={{ fontSize: 11, color: C.textMuted }} dangerouslySetInnerHTML={{ __html: item.description }} />}
+                    </div>
+                  </div>
+                ))
+            }
+          </div>
+        </div>
+
+        {/* Decisions */}
+        {decisions.filter(d => !d.decided).length > 0 && (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: '#fafafa' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 8 }}>🔷 Pending decisions</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {decisions.filter(d => !d.decided).map(d => (
+                <span key={d.id} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 10, background: '#ff9f0a18', color: '#ff9f0a', fontWeight: 600 }}>⏳ {d.name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ─── Stream View Content ───
   const StreamView = () => {
     const stream = activeStream;
     const isControlTower = stream === 'Control Tower';
+    const isSlide = slideMode === stream;
     return (
       <>
+        {/* Slide mode toggle button */}
+        {!isControlTower && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button onClick={() => setSlideMode(isSlide ? null : stream)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 10, border: `1.5px solid ${isSlide ? streamColor(stream) : C.border}`, background: isSlide ? streamColor(stream) : '#fff', color: isSlide ? '#fff' : C.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
+              {isSlide ? '✕ Close slide' : '📊 Slide view'}
+            </button>
+          </div>
+        )}
+        {isSlide ? (
+          <SlideView stream={stream} />
+        ) : (
+          <>
         <QuickAdd stream={stream} />
         <Kanban stream={stream} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1795,7 +1995,76 @@ export default function App() {
             </div>
           </>
         )}
+          </>
+        )}
       </>
+    );
+  };
+
+
+  // ─── Express Note Modal ───
+  const ExpressNoteModal = () => {
+    const [title, setTitle] = useState('Express note — ' + new Date().toLocaleDateString('fr-FR'));
+    const [content, setContent] = useState(expressNote?.content || '');
+    const [date, setDate] = useState(expressNote?.date || todayStr());
+    const [targetStream, setTargetStream] = useState<Stream | null>(null);
+    const [sent, setSent] = useState(false);
+
+    const sendToStream = (stream: Stream) => {
+      addMeeting(stream, { title: title.trim() || 'Express note', date, content });
+      setTargetStream(stream);
+      setSent(true);
+      setTimeout(() => setExpressNote(null), 1200);
+    };
+
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        onClick={e => e.target === e.currentTarget && setExpressNote(null)}>
+        <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 680, boxShadow: '0 20px 60px rgba(0,0,0,.2)', overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.sectionBg }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>⚡</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Notes express</span>
+            </div>
+            <button onClick={() => setExpressNote(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.textMuted, lineHeight: 1 }}>×</button>
+          </div>
+
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Title + date row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
+              <input className="ni" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title…" style={{ fontWeight: 600, fontSize: 14 }} />
+              <input className="ni-date" type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: 150 }} />
+            </div>
+
+            {/* Rich content */}
+            <RichEditor value={content} onChange={setContent} placeholder="Capture tes idées, points clés, décisions… (gras, bullets supportés)" minHeight={200} />
+
+            {/* Send to stream */}
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+                {sent ? `✅ Envoyé dans ${targetStream}` : 'Envoyer dans un stream (Meeting Note)'}
+              </div>
+              {!sent && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {STREAMS.map(s => (
+                    <button key={s} onClick={() => sendToStream(s)}
+                      style={{ padding: '7px 16px', borderRadius: 10, border: `1.5px solid ${streamColor(s)}50`, background: streamColor(s)+'12', color: streamColor(s), fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = streamColor(s)+'25'}
+                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = streamColor(s)+'12'}>
+                      {streamEmoji(s)} {s}
+                    </button>
+                  ))}
+                  <button onClick={() => { addInboxCR({ title: title.trim() || 'Express note', date, content, source: 'express' }); setExpressNote(null); }}
+                    style={{ padding: '7px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.sectionBg, color: C.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    📥 Mettre en inbox CRs
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -1872,6 +2141,7 @@ export default function App() {
 
       {taskModal && <TaskModalView task={taskModal.task} stream={taskModal.stream} />}
       {meetingModal && <MeetingModalView meeting={meetingModal.meeting} stream={meetingModal.stream} />}
+      {expressNote && <ExpressNoteModal />}
     </div>
   );
 }
