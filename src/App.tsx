@@ -622,20 +622,23 @@ export default function App() {
     ];
 
     return (
-    <div className="fade-up" style={{ position: 'relative', marginBottom: 8 }}>
-      <div onClick={() => setTaskModal({ task, stream })}
-        style={{ background: bg, borderRadius: 10, padding: '11px 13px', cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'all .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
+    <div className="fade-up"
+      data-no-drag="true"
+      style={{ position: 'relative', marginBottom: 8 }}
+      onMouseEnter={e => { const btn = e.currentTarget.querySelector('.convert-btn') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
+      onMouseLeave={e => { const btn = e.currentTarget.querySelector('.convert-btn') as HTMLElement; if (btn) btn.style.opacity = '0'; setShowConvert(false); }}>
+      {/* Convert button — outside card, shown on hover, NOT inside draggable click area */}
+      <button
+        className="convert-btn"
+        onMouseDown={e => { e.stopPropagation(); e.preventDefault(); }}
+        onClick={e => { e.stopPropagation(); e.preventDefault(); setShowConvert(v => !v); }}
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 10, background: showConvert ? C.accent : 'rgba(255,255,255,.95)', border: `1px solid ${showConvert ? C.accent : C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, color: showConvert ? '#fff' : C.textMuted, padding: '2px 6px', lineHeight: 1, opacity: showConvert ? 1 : 0, transition: 'opacity .15s, background .15s', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+        title="Convert / move">⇄</button>
+      <div onClick={() => { if (!showConvert) setTaskModal({ task, stream }); }}
+        style={{ background: bg, borderRadius: 10, padding: '11px 13px', paddingRight: 28, cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'box-shadow .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
         onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.07)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4, flex: 1 }}>{task.title}</div>
-          <button
-            data-no-drag="true"
-            onMouseDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); setShowConvert(v => !v); }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: C.textDim, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-            title="Convert / move">⇄</button>
-        </div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4 }}>{task.title}</div>
         <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {task.owner && <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '1px 7px', borderRadius: 5 }}>{task.owner}</span>}
           {task.priority && <PriorityBadge priority={task.priority} />}
