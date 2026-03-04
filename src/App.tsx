@@ -1844,33 +1844,36 @@ export default function App() {
     const toggleHide = (key: string) => setHiddenItems(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
     // Next Thursday = the coming presentation Thursday (today if today IS Thursday)
+    // Use local date helper to avoid UTC timezone shift (Paris = UTC+1)
+    const localDateStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day2 = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day2}`;
+    };
+    const addDays = (dateStr: string, n: number) => {
+      const d = new Date(dateStr + 'T12:00:00'); // noon = safe from DST shifts
+      d.setDate(d.getDate() + n);
+      return localDateStr(d);
+    };
+    const todaySlide = localDateStr(new Date());
+    // Next Thursday = coming presentation (today if today IS Thursday)
     const nextThursday = (() => {
       const d = new Date();
-      const day = d.getDay(); // 0=Sun, 4=Thu
-      const daysAhead = day === 4 ? 0 : (4 - day + 7) % 7;
-      d.setDate(d.getDate() + daysAhead);
-      d.setHours(0,0,0,0);
-      return d.toISOString().split('T')[0];
+      const dow = d.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+      const daysAhead = dow === 4 ? 0 : (4 - dow + 7) % 7;
+      return addDays(todaySlide, daysAhead);
     })();
-    // Last Thursday = the Thursday just before next Thursday (the previous presentation)
-    const lastThursday = (() => {
-      const d = new Date(nextThursday + 'T12:00:00');
-      d.setDate(d.getDate() - 7);
-      return d.toISOString().split('T')[0];
-    })();
+    // Last Thursday = 7 days before next Thursday = previous presentation
+    const lastThursday = addDays(nextThursday, -7);
     // Thursday before that = start of past-week window
-    const prevThursday = (() => {
-      const d = new Date(lastThursday + 'T12:00:00');
-      d.setDate(d.getDate() - 7);
-      return d.toISOString().split('T')[0];
-    })();
-    const todaySlide = new Date().toISOString().split('T')[0];
+    const prevThursday = addDays(lastThursday, -7);
 
-    // Past week = Done tasks with dueDate in [lastThursday-7 .. lastThursday]
+    // Past week = Done tasks with dueDate since lastThursday (26 Feb) up to today (4 Mar)
     const doneTasks = tasks.filter(t =>
-      t.status === 'Done' && t.dueDate && t.dueDate > prevThursday && t.dueDate <= lastThursday
+      t.status === 'Done' && t.dueDate && t.dueDate >= lastThursday && t.dueDate <= todaySlide
     );
-    // Coming week = not Done tasks due today OR before next Thursday (inclusive)
+    // Coming week = not Done, due date from today up to and including next Thursday
     const upcomingTasks = [...tasks.filter(t =>
       t.status !== 'Done' && t.dueDate && t.dueDate >= todaySlide && t.dueDate <= nextThursday
     )].sort((a, b) => ['P0','P1','P2',''].indexOf(a.priority) - ['P0','P1','P2',''].indexOf(b.priority));
@@ -1934,7 +1937,7 @@ export default function App() {
           <div style={{ padding: 16, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, minHeight: 160 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>
               ✅ Activities of the past week
-              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>{fmtDate(prevThursday)} → {fmtDate(lastThursday)}</span>
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>{fmtDate(lastThursday)} → {fmtDate(todaySlide)}</span>
             </div>
             {doneTasks.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No tasks completed this period — mark tasks as Done with a due date to see them here.</div>
@@ -1958,7 +1961,7 @@ export default function App() {
           <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, minHeight: 160 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>
               📅 Activities in the coming week
-              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>due before {fmtDate(nextThursday)}</span>
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>today → {fmtDate(nextThursday)}</span>
             </div>
             {upcomingTasks.length === 0
               ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No upcoming tasks with a due date before next Thursday.</div>
