@@ -5,11 +5,12 @@ type Status = 'Not started' | 'In progress' | 'Done';
 type Priority = 'P0' | 'P1' | 'P2' | '';
 type Stream = 'Control Tower' | 'CRM' | 'iPaaS' | 'Data Hub';
 
-interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; completedAt?: string; }
+interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; completedAt?: string; recurring?: 'weekly'; }
 interface Note { id: string; title: string; description: string; }
 interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; decided: boolean; }
 interface MeetingNote { id: string; title: string; date: string; content: string; photos?: string[]; }
 interface StreamItem { id: string; title: string; owner: string; dueDate: string; description: string; }
+interface InboxCR { id: string; title: string; date: string; content: string; source?: string; }
 interface AppData {
   tasks: Record<string, Task[]>;
   notes: Record<string, Note[]>;
@@ -17,6 +18,7 @@ interface AppData {
   meetings: Record<string, MeetingNote[]>;
   streamItems: Record<string, { toBeDiscussed: StreamItem[]; potentialRisks: StreamItem[]; }>;
   controlTower: { askVattenfall: StreamItem[]; keyMessages: StreamItem[]; };
+  inboxCRs?: InboxCR[];
 }
 
 // ─── Constants ───
@@ -290,6 +292,7 @@ export default function App() {
         if (!p.streamItems) p.streamItems = {};
         WORK_STREAMS.forEach(s => { if (!p.streamItems[s]) p.streamItems[s] = { toBeDiscussed: [], potentialRisks: [] }; });
         if (!p.controlTower) p.controlTower = { askVattenfall: [], keyMessages: [] };
+        if (!p.inboxCRs) p.inboxCRs = [];
         setData(p);
       } catch { setData(buildDefault()); }
     } else { setData(buildDefault()); }
@@ -314,6 +317,7 @@ export default function App() {
         STREAMS.forEach(s => { if (!p.tasks[s]) p.tasks[s] = []; if (!p.notes[s]) p.notes[s] = []; if (!p.decisions[s]) p.decisions[s] = []; if (!p.meetings) p.meetings = {}; if (!p.meetings[s]) p.meetings[s] = []; });
         if (!p.streamItems) p.streamItems = {}; WORK_STREAMS.forEach(s => { if (!p.streamItems[s]) p.streamItems[s] = { toBeDiscussed: [], potentialRisks: [] }; });
         if (!p.controlTower) p.controlTower = { askVattenfall: [], keyMessages: [] };
+        if (!p.inboxCRs) p.inboxCRs = [];
         save(p); alert('✅ Data imported!');
       } catch { alert('❌ Invalid file.'); }
     };
@@ -326,11 +330,29 @@ export default function App() {
   const addTask = (stream: Stream, task: Partial<Task>) => save({ ...data, tasks: { ...data.tasks, [stream]: [...(data.tasks[stream] || []), { id: uid(), status: 'Not started', priority: '', description: '', dueDate: '', ...task, stream } as Task] } });
   const updateTask = (stream: Stream, id: string, updates: Partial<Task>) => {
     const prev = data.tasks[stream]?.find(t => t.id === id);
-    if (updates.status === 'Done' && prev?.status !== 'Done') { launchConfetti(); updates = { ...updates, completedAt: new Date().toISOString().split('T')[0] }; }
+    if (updates.status === 'Done' && prev?.status !== 'Done') {
+      launchConfetti();
+      updates = { ...updates, completedAt: new Date().toISOString().split('T')[0] };
+      // Auto-spawn next weekly occurrence
+      if (prev?.recurring === 'weekly' && prev.dueDate) {
+        const next = new Date(prev.dueDate + 'T12:00:00');
+        next.setDate(next.getDate() + 7);
+        const nextDate = next.toISOString().split('T')[0];
+        const already = (data.tasks[stream] || []).some(t => t.recurring === 'weekly' && t.title === prev.title && t.dueDate === nextDate);
+        if (!already) {
+          const newTask: Task = { ...prev, id: uid(), status: 'Not started', dueDate: nextDate, completedAt: undefined };
+          const updated = data.tasks[stream].map(t => t.id === id ? { ...t, ...updates } : t);
+          save({ ...data, tasks: { ...data.tasks, [stream]: [...updated, newTask] } });
+          return;
+        }
+      }
+    }
     if (updates.status && updates.status !== 'Done') updates = { ...updates, completedAt: undefined };
     save({ ...data, tasks: { ...data.tasks, [stream]: data.tasks[stream].map(t => t.id === id ? { ...t, ...updates } : t) } });
   };
   const deleteTask = (stream: Stream, id: string) => save({ ...data, tasks: { ...data.tasks, [stream]: data.tasks[stream].filter(t => t.id !== id) } });
+  const addInboxCR = (cr: Omit<InboxCR, 'id'>) => save({ ...data, inboxCRs: [...(data.inboxCRs || []), { id: uid(), ...cr }] });
+  const deleteInboxCR = (id: string) => save({ ...data, inboxCRs: (data.inboxCRs || []).filter(c => c.id !== id) });
   const addDecision = (stream: Stream, dec: Omit<Decision, 'id'>) => save({ ...data, decisions: { ...data.decisions, [stream]: [...(data.decisions[stream] || []), { id: uid(), ...dec }] } });
   const deleteDecision = (stream: Stream, id: string) => save({ ...data, decisions: { ...data.decisions, [stream]: data.decisions[stream].filter(d => d.id !== id) } });
   const updateDecision = (stream: Stream, id: string, updates: Partial<Decision>) => save({ ...data, decisions: { ...data.decisions, [stream]: data.decisions[stream].map(d => d.id === id ? { ...d, ...updates } : d) } });
@@ -436,10 +458,11 @@ export default function App() {
     const [dueDate, setDueDate] = useState('');
     const color = streamColor(stream);
 
-    const reset = () => { setTitle(''); setNote(''); setOwner(''); setPriority(''); setDueDate(''); setOpen(false); };
+    const [recurring, setRecurring] = useState<'weekly' | undefined>(undefined);
+    const reset = () => { setTitle(''); setNote(''); setOwner(''); setPriority(''); setDueDate(''); setRecurring(undefined); setOpen(false); };
     const submit = () => {
       if (!title.trim()) return;
-      addTask(stream, { title: title.trim(), description: note, owner, priority, dueDate });
+      addTask(stream, { title: title.trim(), description: note, owner, priority, dueDate, recurring });
       reset();
     };
 
@@ -508,6 +531,20 @@ export default function App() {
               <div style={{ flexShrink:0, paddingLeft:10 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.6px', marginBottom:6 }}>Due date</div>
                 <input className="ni-date" type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} style={{ width:150 }} />
+              </div>
+
+              <Divider/>
+
+              {/* Recurring */}
+              <div style={{ flexShrink:0, paddingLeft:10 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.6px', marginBottom:6 }}>Repeat</div>
+                <button onClick={() => setRecurring(r => r === 'weekly' ? undefined : 'weekly')}
+                  style={{ padding:'4px 10px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer',
+                    border:`1.5px solid ${recurring === 'weekly' ? C.accent : C.border}`,
+                    background: recurring === 'weekly' ? C.accent+'18' : '#fff',
+                    color: recurring === 'weekly' ? C.accent : C.textMuted, transition:'all .15s' }}>
+                  🔁 Weekly
+                </button>
               </div>
             </div>
 
@@ -592,6 +629,7 @@ export default function App() {
           {task.owner && <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '1px 7px', borderRadius: 5 }}>{task.owner}</span>}
           {task.priority && <PriorityBadge priority={task.priority} />}
           {task.dueDate && <span style={{ fontSize: 11, color: isOverdue ? C.danger : C.textDim, fontWeight: isOverdue ? 600 : 400 }}>{isOverdue ? '⚠ ' : ''}{fmtDate(task.dueDate)}</span>}
+          {task.recurring === 'weekly' && <span style={{ fontSize: 10, color: C.accent, background: C.accent+'15', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🔁 weekly</span>}
         </div>
       </div>
       {showConvert && (
@@ -1087,6 +1125,13 @@ export default function App() {
               <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Status</label><select className="ni" value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Status })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
               <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Priority</label><select className="ni" value={form.priority || ''} onChange={e => setForm({ ...form, priority: e.target.value as Priority })}><option value="">None</option>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</select></div>
             </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Recurrence</label>
+              <button onClick={() => setForm({ ...form, recurring: form.recurring === 'weekly' ? undefined : 'weekly' })}
+                style={{ padding:'5px 14px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer', border:`1.5px solid ${form.recurring === 'weekly' ? C.accent : C.border}`, background: form.recurring === 'weekly' ? C.accent+'18' : '#fff', color: form.recurring === 'weekly' ? C.accent : C.textMuted }}>
+                🔁 Repeat weekly {form.recurring === 'weekly' ? '· ON' : '· OFF'}
+              </button>
+            </div>
             <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Notes</label><RichEditor value={form.description || ''} onChange={v => setForm({ ...form, description: v })} placeholder="Add context…" minHeight={120} /></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
               <DelBtn onClick={() => { deleteTask(stream, task.id); setTaskModal(null); }} label="this task" />
@@ -1101,6 +1146,10 @@ export default function App() {
   // ─── Weekly View ───
   const WeeklyView = () => {
     const [myTasks, setMyTasks] = useState(false);
+    const [showCRImport, setShowCRImport] = useState(false);
+    const [crTitle, setCrTitle] = useState('');
+    const [crContent, setCrContent] = useState('');
+    const [openCRId, setOpenCRId] = useState<string|null>(null);
     const days = getWeekDates(weekOffset);
     const weekStart = days[0]; const weekEnd = days[4];
     const weekLabel = `${weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
@@ -1197,6 +1246,87 @@ export default function App() {
             );
           })}
         </div>
+
+        {/* ── 📥 CRs to Categorize ── */}
+        {(()  => {
+          const inbox = data.inboxCRs || [];
+
+          const handleCRFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+              const text = ev.target?.result as string;
+              setCrContent(text);
+              setCrTitle(file.name.replace(/\.[^.]+$/, ''));
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+          };
+
+          const submitCR = () => {
+            if (!crTitle.trim()) return;
+            addInboxCR({ title: crTitle.trim(), date: todayStr(), content: crContent, source: 'manual' });
+            setCrTitle(''); setCrContent(''); setShowCRImport(false);
+          };
+
+          const assignCR = (cr: InboxCR, stream: Stream) => {
+            addMeeting(stream, { title: cr.title, date: cr.date, content: cr.content });
+            deleteInboxCR(cr.id);
+          };
+
+          return (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <CardHeader
+                title={<>📥 CRs to categorize {inbox.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: '#ff9f0a18', color: '#ff9f0a' }}>{inbox.length}</span>}</>}
+                action={<button className="bg" onClick={() => setShowCRImport(v => !v)}>{showCRImport ? 'Cancel' : '+ Import CR'}</button>}
+              />
+              {showCRImport && (
+                <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input className="ni" style={{ flex: 2 }} placeholder="CR title…" value={crTitle} onChange={e => setCrTitle(e.target.value)} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 12, color: C.textMuted, background: C.sectionBg, whiteSpace: 'nowrap' }}>
+                      📎 Upload file (txt/md)
+                      <input type="file" accept=".txt,.md,.text" style={{ display: 'none' }} onChange={handleCRFile} />
+                    </label>
+                  </div>
+                  <RichEditor value={crContent} onChange={setCrContent} placeholder="Or paste your CR content here… (text, bullets, etc.)" minHeight={120} />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button className="bp" onClick={submitCR}>Add to inbox</button>
+                  </div>
+                </div>
+              )}
+              {inbox.length === 0
+                ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>No CRs to categorize — import a meeting note to assign it to a stream.</div>
+                : inbox.map(cr => (
+                    <div key={cr.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cr.title}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>{fmtDate(cr.date)}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <button onClick={() => setOpenCRId(openCRId === cr.id ? null : cr.id)} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.sectionBg, cursor: 'pointer', color: C.textMuted }}>
+                            {openCRId === cr.id ? 'Hide' : 'Read'}
+                          </button>
+                          <span style={{ fontSize: 11, color: C.textMuted }}>→</span>
+                          {STREAMS.map(s => (
+                            <button key={s} onClick={() => assignCR(cr, s)}
+                              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, border: `1.5px solid ${streamColor(s)}40`, background: streamColor(s)+'12', color: streamColor(s), cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {s}
+                            </button>
+                          ))}
+                          <DelBtn onClick={() => deleteInboxCR(cr.id)} />
+                        </div>
+                      </div>
+                      {openCRId === cr.id && (
+                        <div style={{ padding: '0 16px 14px', fontSize: 13, color: C.text, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: cr.content }} />
+                      )}
+                    </div>
+                  ))
+              }
+            </div>
+          );
+        })()}
 
         {/* ── Decisions: overdue pending + this week ── */}
         {(() => {
