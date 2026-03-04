@@ -5,7 +5,7 @@ type Status = 'Not started' | 'In progress' | 'Done';
 type Priority = 'P0' | 'P1' | 'P2' | '';
 type Stream = 'Control Tower' | 'CRM' | 'iPaaS' | 'Data Hub';
 
-interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; }
+interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; completedAt?: string; }
 interface Note { id: string; title: string; description: string; }
 interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; decided: boolean; }
 interface MeetingNote { id: string; title: string; date: string; content: string; photos?: string[]; }
@@ -326,7 +326,8 @@ export default function App() {
   const addTask = (stream: Stream, task: Partial<Task>) => save({ ...data, tasks: { ...data.tasks, [stream]: [...(data.tasks[stream] || []), { id: uid(), status: 'Not started', priority: '', description: '', dueDate: '', ...task, stream } as Task] } });
   const updateTask = (stream: Stream, id: string, updates: Partial<Task>) => {
     const prev = data.tasks[stream]?.find(t => t.id === id);
-    if (updates.status === 'Done' && prev?.status !== 'Done') launchConfetti();
+    if (updates.status === 'Done' && prev?.status !== 'Done') { launchConfetti(); updates = { ...updates, completedAt: new Date().toISOString().split('T')[0] }; }
+    if (updates.status && updates.status !== 'Done') updates = { ...updates, completedAt: undefined };
     save({ ...data, tasks: { ...data.tasks, [stream]: data.tasks[stream].map(t => t.id === id ? { ...t, ...updates } : t) } });
   };
   const deleteTask = (stream: Stream, id: string) => save({ ...data, tasks: { ...data.tasks, [stream]: data.tasks[stream].filter(t => t.id !== id) } });
@@ -438,7 +439,7 @@ export default function App() {
     const reset = () => { setTitle(''); setNote(''); setOwner(''); setPriority(''); setDueDate(''); setOpen(false); };
     const submit = () => {
       if (!title.trim()) return;
-      addTask(stream, { title: title.trim(), description: note.trim(), owner, priority, dueDate });
+      addTask(stream, { title: title.trim(), description: note, owner, priority, dueDate });
       reset();
     };
 
@@ -511,8 +512,9 @@ export default function App() {
             </div>
 
             {/* Note */}
-            <textarea className="ni" value={note} onChange={e=>setNote(e.target.value)}
-              placeholder="Add a note… (optional)" style={{ minHeight:52, resize:'none', fontSize:13, marginBottom:12 }} />
+            <div style={{ marginBottom: 12 }}>
+              <RichEditor value={note} onChange={v => setNote(v)} placeholder="Add a note… (optional)" minHeight={70} />
+            </div>
 
             {/* Actions */}
             <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
@@ -528,23 +530,85 @@ export default function App() {
   // ─── Task Card ───
   const TaskCard = ({ task, stream }: { task: Task; stream: Stream }) => {
     const today = todayStr();
+    const [showConvert, setShowConvert] = useState(false);
     const isOverdue = task.dueDate && task.dueDate < today && task.status !== 'Done';
     const isDue3Days = task.dueDate && task.dueDate >= today && task.dueDate <= (() => { const d = new Date(); d.setDate(d.getDate()+3); return d.toISOString().split('T')[0]; })() && task.status !== 'Done';
     let bg = '#fff'; let borderColor = C.border; let leftBar = streamColor(stream);
     if (task.status === 'Done') { bg = '#f0fdf4'; borderColor = '#34c75930'; leftBar = C.done; }
-    else if (task.priority === 'P0' && isOverdue) { bg = '#fff5f5'; borderColor = '#ff3b3030'; leftBar = C.danger; }
+    else if (isOverdue && task.priority === 'P0') { bg = '#fff0f0'; borderColor = '#ff3b3060'; leftBar = C.danger; }
+    else if (isOverdue && task.priority === 'P1') { bg = '#fff8f0'; borderColor = '#ff9f0a50'; leftBar = '#ff9f0a'; }
     else if (task.priority === 'P0' && isDue3Days) { bg = '#fffbf0'; borderColor = '#ff9f0a30'; leftBar = C.p1; }
+
+    const convertOptions: { label: string; icon: string; action: () => void }[] = [
+      ...STREAMS.map(s => ({
+        label: `→ Task in ${s}`,
+        icon: '📋',
+        action: () => {
+          addTask(s, { title: task.title, description: task.description, owner: task.owner, priority: task.priority, dueDate: task.dueDate });
+          deleteTask(stream, task.id);
+          setShowConvert(false);
+        }
+      })).filter(o => o.label !== `→ Task in ${stream}`),
+      { label: '→ Decision', icon: '🔷', action: () => {
+        addDecision(stream, { name: task.title, date: task.dueDate || todayStr(), owner: task.owner, description: task.description || '', decided: false });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+      { label: '→ Meeting Note', icon: '📝', action: () => {
+        addMeeting(stream, { title: task.title, date: task.dueDate || todayStr(), content: task.description || '' });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+      { label: '→ To be discussed', icon: '💬', action: () => {
+        addStreamItem(stream, 'toBeDiscussed', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+      { label: '→ Risk', icon: '⚠️', action: () => {
+        addStreamItem(stream, 'potentialRisks', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+      { label: '→ Ask Vattenfall', icon: '📤', action: () => {
+        addControlTower('askVattenfall', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+      { label: '→ Key Message', icon: '💡', action: () => {
+        addControlTower('keyMessages', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
+        deleteTask(stream, task.id); setShowConvert(false);
+      }},
+    ];
+
     return (
-    <div onClick={() => setTaskModal({ task, stream })} className="fade-up"
-      style={{ background: bg, borderRadius: 10, padding: '11px 13px', marginBottom: 8, cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'all .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.07)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
-      <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4 }}>{task.title}</div>
-      <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-        {task.owner && <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '1px 7px', borderRadius: 5 }}>{task.owner}</span>}
-        {task.priority && <PriorityBadge priority={task.priority} />}
-        {task.dueDate && <span style={{ fontSize: 11, color: isOverdue ? C.danger : C.textDim, fontWeight: isOverdue ? 600 : 400 }}>{isOverdue ? '⚠ ' : ''}{fmtDate(task.dueDate)}</span>}
+    <div className="fade-up" style={{ position: 'relative', marginBottom: 8 }}>
+      <div onClick={() => setTaskModal({ task, stream })}
+        style={{ background: bg, borderRadius: 10, padding: '11px 13px', cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'all .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.07)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4, flex: 1 }}>{task.title}</div>
+          <button
+            onClick={e => { e.stopPropagation(); setShowConvert(v => !v); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: C.textDim, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+            title="Convert / move">⇄</button>
+        </div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+          {task.owner && <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '1px 7px', borderRadius: 5 }}>{task.owner}</span>}
+          {task.priority && <PriorityBadge priority={task.priority} />}
+          {task.dueDate && <span style={{ fontSize: 11, color: isOverdue ? C.danger : C.textDim, fontWeight: isOverdue ? 600 : 400 }}>{isOverdue ? '⚠ ' : ''}{fmtDate(task.dueDate)}</span>}
+        </div>
       </div>
+      {showConvert && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: '#fff', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,.15)', border: `1px solid ${C.border}`, minWidth: 210, overflow: 'hidden', marginTop: 4 }}>
+          <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', borderBottom: `1px solid ${C.border}` }}>Convert / Move to</div>
+          {convertOptions.map((opt, i) => (
+            <button key={i} onClick={opt.action}
+              style={{ width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.sectionBg}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'none'}>
+              <span>{opt.icon}</span><span>{opt.label}</span>
+            </button>
+          ))}
+          <button onClick={() => setShowConvert(false)}
+            style={{ width: '100%', padding: '7px 14px', background: '#fafafa', border: 'none', borderTop: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 11, color: C.textDim }}>Cancel</button>
+        </div>
+      )}
     </div>
     );
   };
@@ -569,10 +633,21 @@ export default function App() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
         {STATUSES.map(status => {
-          const allCol = (data.tasks[stream] || []).filter(t => t.status === status);
+          const allColUnsorted = (data.tasks[stream] || []).filter(t => t.status === status);
+          const todayK = new Date().toISOString().split('T')[0];
+          const allCol = [...allColUnsorted].sort((a, b) => {
+            const aOver = a.dueDate && a.dueDate < todayK && a.status !== 'Done';
+            const bOver = b.dueDate && b.dueDate < todayK && b.status !== 'Done';
+            if (aOver && !bOver) return -1;
+            if (!aOver && bOver) return 1;
+            const aPri = ['P0','P1','P2',''].indexOf(a.priority);
+            const bPri = ['P0','P1','P2',''].indexOf(b.priority);
+            return aPri - bPri;
+          });
           // For Done: split recent (< 1 week) vs old (>= 1 week)
-          const recentDone = status === 'Done' ? allCol.filter(t => !t.dueDate || t.dueDate >= oneWeekAgoStr) : allCol;
-          const oldDone = status === 'Done' ? allCol.filter(t => t.dueDate && t.dueDate < oneWeekAgoStr) : [];
+          const doneDate = (t: Task) => t.completedAt || t.dueDate || '';
+          const recentDone = status === 'Done' ? allCol.filter(t => !doneDate(t) || doneDate(t) >= oneWeekAgoStr) : allCol;
+          const oldDone = status === 'Done' ? allCol.filter(t => doneDate(t) && doneDate(t) < oneWeekAgoStr) : [];
           const col = recentDone;
           const dotColor = { 'Not started': C.notStarted, 'In progress': C.inProgress, Done: C.done }[status];
           const isOver = dragOver === status;
@@ -1053,6 +1128,32 @@ export default function App() {
           </div>
         </div>
 
+        {/* ── Overdue block ── */}
+        {(() => {
+          const overdueTasks = allTasks.filter(t => t.dueDate && t.dueDate < today && t.status !== 'Done' && (t.priority === 'P0' || t.priority === 'P1'));
+          if (overdueTasks.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 20, background: '#fff5f5', border: '1.5px solid #ff3b3040', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #ff3b3025', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🚨</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#ff3b30' }}>Overdue tasks ({overdueTasks.length})</span>
+              </div>
+              <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {overdueTasks.map(t => (
+                  <div key={t.id} onClick={() => setTaskModal({ task: t, stream: t.stream })}
+                    style={{ padding: '6px 10px', borderRadius: 9, cursor: 'pointer', background: '#fff', border: '1px solid #ff3b3035', display: 'flex', alignItems: 'center', gap: 7, maxWidth: 280 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff3b30', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{t.title}</div>
+                      <div style={{ fontSize: 10, color: '#ff3b30', fontWeight: 600 }}>⚠ {fmtDate(t.dueDate)} · {t.stream} · {t.priority}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <SectionLabel>🔥 Top Priorities by Day</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
           {days.map((day, i) => {
@@ -1097,15 +1198,43 @@ export default function App() {
           })}
         </div>
 
-        <div className="card">
-          <CardHeader title={<>🔷 Decisions this week <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: C.ipaas + '18', color: C.ipaas }}>{weekDecisions.length}</span></>} />
-          {weekDecisions.length === 0 ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>No decisions this week</div> : weekDecisions.map(d => (
-            <div key={d.id} style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <StreamBadge stream={d.stream!} />
-              <div><div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{d.name}</div><div style={{ fontSize: 11, color: C.textMuted }}>{fmtDate(d.date)}{d.owner ? ` · ${d.owner}` : ''}</div></div>
+        {/* ── Decisions: overdue pending + this week ── */}
+        {(() => {
+          const overdueDecisions = allDecisions.filter(d => d.date && d.date < today && !d.decided);
+          const allWeekAndOverdue = [...overdueDecisions.filter(d => !weekDecisions.find(w => w.id === d.id)), ...weekDecisions].sort((a, b) => {
+            const aOver = a.date && a.date < today && !a.decided;
+            const bOver = b.date && b.date < today && !b.decided;
+            if (aOver && !bOver) return -1;
+            if (!aOver && bOver) return 1;
+            return 0;
+          });
+          const total = allWeekAndOverdue.length;
+          return (
+            <div className="card">
+              <CardHeader title={<>🔷 Decisions {<span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: C.ipaas + '18', color: C.ipaas }}>{total}</span>}</>} />
+              {total === 0
+                ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>No decisions this week</div>
+                : allWeekAndOverdue.map(d => {
+                    const isOverdueD = d.date && d.date < today && !d.decided;
+                    return (
+                      <div key={d.id} style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10, background: isOverdueD ? '#fff5f5' : 'transparent' }}>
+                        <StreamBadge stream={d.stream!} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: isOverdueD ? 700 : 500, color: isOverdueD ? '#ff3b30' : C.text }}>{isOverdueD ? '🚨 ' : ''}{d.name}</div>
+                          <div style={{ fontSize: 11, color: isOverdueD ? '#ff3b30' : C.textMuted }}>
+                            {isOverdueD ? `⚠ Overdue · ` : ''}{fmtDate(d.date)}{d.owner ? ` · ${d.owner}` : ''}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: d.decided ? '#34c75918' : (isOverdueD ? '#ff3b3018' : '#ff9f0a18'), color: d.decided ? '#34c759' : (isOverdueD ? '#ff3b30' : '#ff9f0a'), whiteSpace: 'nowrap' }}>
+                          {d.decided ? '✅ Decided' : '⏳ Pending'}
+                        </span>
+                      </div>
+                    );
+                  })
+              }
             </div>
-          ))}
-        </div>
+          );
+        })()}
       </div>
     );
   };
