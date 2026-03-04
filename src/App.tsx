@@ -576,7 +576,6 @@ export default function App() {
   // ─── Task Card ───
   const TaskCard = ({ task, stream }: { task: Task; stream: Stream }) => {
     const today = todayStr();
-    const [showConvert, setShowConvert] = useState(false);
     const isOverdue = task.dueDate && task.dueDate < today && task.status !== 'Done';
     const isDue3Days = task.dueDate && task.dueDate >= today && task.dueDate <= (() => { const d = new Date(); d.setDate(d.getDate()+3); return d.toISOString().split('T')[0]; })() && task.status !== 'Done';
     let bg = '#fff'; let borderColor = C.border; let leftBar = streamColor(stream);
@@ -585,57 +584,11 @@ export default function App() {
     else if (isOverdue && task.priority === 'P1') { bg = '#fff8f0'; borderColor = '#ff9f0a50'; leftBar = '#ff9f0a'; }
     else if (task.priority === 'P0' && isDue3Days) { bg = '#fffbf0'; borderColor = '#ff9f0a30'; leftBar = C.p1; }
 
-    const convertOptions: { label: string; icon: string; action: () => void }[] = [
-      ...STREAMS.map(s => ({
-        label: `→ Task in ${s}`,
-        icon: '📋',
-        action: () => {
-          addTask(s, { title: task.title, description: task.description, owner: task.owner, priority: task.priority, dueDate: task.dueDate });
-          deleteTask(stream, task.id);
-          setShowConvert(false);
-        }
-      })).filter(o => o.label !== `→ Task in ${stream}`),
-      { label: '→ Decision', icon: '🔷', action: () => {
-        addDecision(stream, { name: task.title, date: task.dueDate || todayStr(), owner: task.owner, description: task.description || '', decided: false });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-      { label: '→ Meeting Note', icon: '📝', action: () => {
-        addMeeting(stream, { title: task.title, date: task.dueDate || todayStr(), content: task.description || '' });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-      { label: '→ To be discussed', icon: '💬', action: () => {
-        addStreamItem(stream, 'toBeDiscussed', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-      { label: '→ Risk', icon: '⚠️', action: () => {
-        addStreamItem(stream, 'potentialRisks', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-      { label: '→ Ask Vattenfall', icon: '📤', action: () => {
-        addControlTower('askVattenfall', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-      { label: '→ Key Message', icon: '💡', action: () => {
-        addControlTower('keyMessages', { title: task.title, owner: task.owner, dueDate: task.dueDate, description: task.description || '' });
-        deleteTask(stream, task.id); setShowConvert(false);
-      }},
-    ];
 
     return (
-    <div className="fade-up"
-      data-no-drag="true"
-      style={{ position: 'relative', marginBottom: 8 }}
-      onMouseEnter={e => { const btn = e.currentTarget.querySelector('.convert-btn') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
-      onMouseLeave={e => { const btn = e.currentTarget.querySelector('.convert-btn') as HTMLElement; if (btn) btn.style.opacity = '0'; setShowConvert(false); }}>
-      {/* Convert button — outside card, shown on hover, NOT inside draggable click area */}
-      <button
-        className="convert-btn"
-        onMouseDown={e => { e.stopPropagation(); e.preventDefault(); }}
-        onClick={e => { e.stopPropagation(); e.preventDefault(); setShowConvert(v => !v); }}
-        style={{ position: 'absolute', top: 6, right: 6, zIndex: 10, background: showConvert ? C.accent : 'rgba(255,255,255,.95)', border: `1px solid ${showConvert ? C.accent : C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, color: showConvert ? '#fff' : C.textMuted, padding: '2px 6px', lineHeight: 1, opacity: showConvert ? 1 : 0, transition: 'opacity .15s, background .15s', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
-        title="Convert / move">⇄</button>
-      <div onClick={() => { if (!showConvert) setTaskModal({ task, stream }); }}
-        style={{ background: bg, borderRadius: 10, padding: '11px 13px', paddingRight: 28, cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'box-shadow .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
+    <div className="fade-up" style={{ position: 'relative', marginBottom: 8 }}>
+      <div onClick={() => setTaskModal({ task, stream })}
+        style={{ background: bg, borderRadius: 10, padding: '11px 13px', cursor: 'pointer', border: `1px solid ${borderColor}`, transition: 'box-shadow .15s', textAlign: 'left', borderLeft: `3px solid ${leftBar}` }}
         onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.07)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4 }}>{task.title}</div>
@@ -647,32 +600,7 @@ export default function App() {
           {(task.linkedDecisionIds?.length || 0) > 0 && <span style={{ fontSize: 10, color: '#5856d6', background: '#5856d615', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🔗 {task.linkedDecisionIds!.length} dec.</span>}
         </div>
       </div>
-      {showConvert && (
-        <>
-          {/* Backdrop to close on outside click */}
-          <div style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setShowConvert(false)} />
-          <div style={{ position: 'fixed', zIndex: 199, background: '#fff', borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,.18)', border: `1px solid ${C.border}`, minWidth: 210, overflow: 'hidden' }}
-            ref={(el) => {
-              if (!el) return;
-              const rect = el.previousElementSibling?.previousElementSibling?.getBoundingClientRect?.() || el.getBoundingClientRect();
-              const spaceBelow = window.innerHeight - rect.bottom;
-              el.style.top = spaceBelow > 300 ? `${rect.bottom + 4}px` : `${rect.top - el.offsetHeight - 4}px`;
-              el.style.right = `${window.innerWidth - rect.right}px`;
-            }}>
-            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', borderBottom: `1px solid ${C.border}` }}>Convert / Move to</div>
-            {convertOptions.map((opt, i) => (
-              <button key={i} onClick={opt.action}
-                style={{ width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12, color: C.text, display: 'flex', alignItems: 'center', gap: 8 }}
-                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = C.sectionBg}
-                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'none'}>
-                <span>{opt.icon}</span><span>{opt.label}</span>
-              </button>
-            ))}
-            <button onClick={() => setShowConvert(false)}
-              style={{ width: '100%', padding: '7px 14px', background: '#fafafa', border: 'none', borderTop: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 11, color: C.textDim }}>Cancel</button>
-          </div>
-        </>
-      )}
+
     </div>
     );
   };
@@ -1185,6 +1113,37 @@ export default function App() {
               );
             })()}
             <div><label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>Notes</label><RichEditor value={form.description || ''} onChange={v => setForm({ ...form, description: v })} placeholder="Add context…" minHeight={120} /></div>
+            {/* Convert / Move to */}
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>⇄ Convert / Move to</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {STREAMS.filter(s => s !== stream).map(s => (
+                  <button key={s} onClick={() => {
+                    addTask(s, { title: form.title, description: form.description, owner: form.owner, priority: form.priority, dueDate: form.dueDate, recurring: form.recurring });
+                    deleteTask(stream, task.id);
+                    setTaskModal(null);
+                  }} style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${streamColor(s)}40`, background: streamColor(s)+'10', color: streamColor(s), fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    📋 Task in {s}
+                  </button>
+                ))}
+                <button onClick={() => {
+                  addDecision(stream, { name: form.title, date: form.dueDate || todayStr(), owner: form.owner, description: form.description || '', decided: false });
+                  deleteTask(stream, task.id); setTaskModal(null);
+                }} style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${C.ipaas}40`, background: C.ipaas+'10', color: C.ipaas, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🔷 Decision</button>
+                <button onClick={() => {
+                  addMeeting(stream, { title: form.title, date: form.dueDate || todayStr(), content: form.description || '' });
+                  deleteTask(stream, task.id); setTaskModal(null);
+                }} style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${C.control}40`, background: C.control+'10', color: C.control, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📝 Meeting Note</button>
+                <button onClick={() => {
+                  addStreamItem(stream, 'toBeDiscussed', { title: form.title, owner: form.owner, dueDate: form.dueDate || '', description: form.description || '' });
+                  deleteTask(stream, task.id); setTaskModal(null);
+                }} style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.sectionBg, color: C.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>💬 To discuss</button>
+                <button onClick={() => {
+                  addStreamItem(stream, 'potentialRisks', { title: form.title, owner: form.owner, dueDate: form.dueDate || '', description: form.description || '' });
+                  deleteTask(stream, task.id); setTaskModal(null);
+                }} style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${C.danger}40`, background: C.danger+'10', color: C.danger, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>⚠️ Risk</button>
+              </div>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
               <DelBtn onClick={() => { deleteTask(stream, task.id); setTaskModal(null); }} label="this task" />
               <button className="bp" onClick={() => { updateTask(stream, task.id, form); setTaskModal(null); }}>Save changes</button>
