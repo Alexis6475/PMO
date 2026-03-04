@@ -7,7 +7,7 @@ type Stream = 'Control Tower' | 'CRM' | 'iPaaS' | 'Data Hub';
 
 interface Task { id: string; stream: Stream; title: string; owner: string; status: Status; priority: Priority; dueDate: string; description: string; }
 interface Note { id: string; title: string; description: string; }
-interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; }
+interface Decision { id: string; name: string; date: string; owner: string; description: string; stream?: Stream; decided: boolean; }
 interface MeetingNote { id: string; title: string; date: string; content: string; photos?: string[]; }
 interface StreamItem { id: string; title: string; owner: string; dueDate: string; description: string; }
 interface AppData {
@@ -43,56 +43,46 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const SEED_TASKS: Record<string, Task[]> = { CRM: [], iPaaS: [], 'Data Hub': [], 'Control Tower': [] };
 
 
-// ─── Roadmap seed data (from Excel PMO) ───
+// ─── Roadmap seed data (updated post-merger Mar 2026) ───
 interface RoadmapStep { id: string; stream: string; step: string; name: string; start: string; end: string; status: string; isStep: boolean; }
 const ROADMAP: RoadmapStep[] = [
-  // Data Hub
-  { id:'dh1',  stream:'Data Hub', step:'1',   name:'Scoping | Audit of existing state',          start:'2026-01-12', end:'2026-02-23', status:'In Progress', isStep:true  },
-  { id:'dh1.1',stream:'Data Hub', step:'1.1', name:'Document collection and analysis',            start:'2026-01-12', end:'2026-01-26', status:'Done',        isStep:false },
-  { id:'dh1.2',stream:'Data Hub', step:'1.2', name:'Interaction mapping',                         start:'2026-02-02', end:'2026-02-16', status:'Done',        isStep:false },
-  { id:'dh1.3',stream:'Data Hub', step:'1.3', name:'Business interviews',                         start:'2026-01-26', end:'2026-02-02', status:'Done',        isStep:false },
-  { id:'dh1.4',stream:'Data Hub', step:'1.4', name:'Synthesis of business interviews',            start:'2026-02-09', end:'2026-02-23', status:'In Progress', isStep:false },
-  { id:'dh2',  stream:'Data Hub', step:'2',   name:'Target definition',                           start:'2026-02-09', end:'2026-04-06', status:'In Progress', isStep:true  },
-  { id:'dh2.1',stream:'Data Hub', step:'2.1', name:'Co-construction of target architecture',      start:'2026-02-16', end:'2026-03-16', status:'In Progress', isStep:false },
-  { id:'dh2.2',stream:'Data Hub', step:'2.2', name:'Construction of urbanization strategy',       start:'2026-02-09', end:'2026-03-02', status:'In Progress', isStep:false },
-  { id:'dh2.3',stream:'Data Hub', step:'2.3', name:'Definition of migration strategy',            start:'2026-02-09', end:'2026-03-02', status:'In Progress', isStep:false },
-  { id:'dh2.4',stream:'Data Hub', step:'2.4', name:'Deployment strategy definition',              start:'2026-03-23', end:'2026-04-06', status:'Not started', isStep:false },
-  { id:'dh3',  stream:'Data Hub', step:'3',   name:'Roadmap definition',                          start:'2026-03-23', end:'2026-04-13', status:'Not started', isStep:true  },
-  { id:'dh3.1',stream:'Data Hub', step:'3.1', name:'Budget / Cost estimations',                   start:'2026-03-23', end:'2026-04-06', status:'Not started', isStep:false },
-  { id:'dh3.2',stream:'Data Hub', step:'3.2', name:'Roadmap (2-years) and action-plan',           start:'2026-04-06', end:'2026-04-13', status:'Not started', isStep:false },
-  { id:'dh4',  stream:'Data Hub', step:'4',   name:'Data governance',                             start:'2026-02-09', end:'2026-03-30', status:'In Progress', isStep:true  },
-  { id:'dh4.1',stream:'Data Hub', step:'4.1', name:'Data governance strategy definition',         start:'2026-02-09', end:'2026-03-16', status:'In Progress', isStep:false },
-  { id:'dh4.2',stream:'Data Hub', step:'4.2', name:'Governance plan definition',                  start:'2026-03-23', end:'2026-03-30', status:'Not started', isStep:false },
-  { id:'dh5',  stream:'Data Hub', step:'5',   name:'Setting-up data platform',                    start:'2026-04-20', end:'2026-05-11', status:'Not started', isStep:true  },
-  // iPaaS
-  { id:'ip1',  stream:'iPaaS',    step:'1',   name:'Kick-Off methodological framework',           start:'2026-01-12', end:'2026-01-19', status:'Done',        isStep:true  },
-  { id:'ip2',  stream:'iPaaS',    step:'2',   name:'Dataflow identification & roadmap',           start:'2026-01-19', end:'2026-04-06', status:'In Progress', isStep:true  },
-  { id:'ip2.1',stream:'iPaaS',    step:'2.1', name:'Identification of dataflows to integrate',   start:'2026-01-19', end:'2026-03-16', status:'In Progress', isStep:false },
-  { id:'ip2.2',stream:'iPaaS',    step:'2.2', name:'Identification of 3 pilot dataflows',        start:'2026-01-19', end:'2026-01-26', status:'Done',        isStep:false },
-  { id:'ip2.3',stream:'iPaaS',    step:'2.3', name:'Conception of the 3 pilot dataflows',        start:'2026-02-02', end:'2026-02-16', status:'Done',        isStep:false },
-  { id:'ip2.4',stream:'iPaaS',    step:'2.4', name:'Roadmap (2-years) derivation',               start:'2026-03-23', end:'2026-03-30', status:'Not started', isStep:false },
-  { id:'ip2.5',stream:'iPaaS',    step:'2.5', name:'Roadmap validation',                         start:'2026-04-06', end:'2026-04-06', status:'Not started', isStep:false },
-  { id:'ip3',  stream:'iPaaS',    step:'3',   name:'Prioritized backlog',                        start:'2026-03-16', end:'2026-04-06', status:'Not started', isStep:true  },
-  { id:'ip3.1',stream:'iPaaS',    step:'3.1', name:'Prioritized backlog creation',               start:'2026-03-16', end:'2026-03-30', status:'Not started', isStep:false },
-  { id:'ip3.2',stream:'iPaaS',    step:'3.2', name:'Backlog validation',                         start:'2026-04-06', end:'2026-04-06', status:'Not started', isStep:false },
-  { id:'ip4',  stream:'iPaaS',    step:'4',   name:'Platform initialization',                    start:'2026-02-16', end:'2026-03-30', status:'In Progress', isStep:true  },
-  { id:'ip4.1',stream:'iPaaS',    step:'4.1', name:'Platform set-up',                            start:'2026-02-09', end:'2026-02-09', status:'Done',        isStep:false },
-  { id:'ip4.4',stream:'iPaaS',    step:'4.4', name:'Core Best Practices',                        start:'2026-02-23', end:'2026-02-23', status:'In Progress', isStep:false },
-  { id:'ip4.5',stream:'iPaaS',    step:'4.5', name:'Lifecycle management',                       start:'2026-03-02', end:'2026-03-02', status:'Not started', isStep:false },
-  { id:'ip4.6',stream:'iPaaS',    step:'4.6', name:'Intake and prioritization',                  start:'2026-03-09', end:'2026-03-16', status:'Not started', isStep:false },
-  { id:'ip4.9',stream:'iPaaS',    step:'4.9', name:'Development of the 3 pilot dataflows',      start:'2026-02-23', end:'2026-03-30', status:'In Progress', isStep:false },
-  // CRM
-  { id:'crm1', stream:'CRM',      step:'1',   name:'Scoping',                                    start:'2025-12-01', end:'2026-03-23', status:'In Progress', isStep:true  },
-  { id:'crm1.1',stream:'CRM',     step:'1.1', name:'Scoping workshops',                          start:'2025-12-01', end:'2026-03-23', status:'In Progress', isStep:false },
-  { id:'crm1.2',stream:'CRM',     step:'1.2', name:'Data model definition',                      start:'2025-12-01', end:'2026-03-23', status:'In Progress', isStep:false },
-  { id:'crm1.3',stream:'CRM',     step:'1.3', name:'Business process definition',                start:'2025-12-01', end:'2026-03-23', status:'In Progress', isStep:false },
-  { id:'crm2', stream:'CRM',      step:'2',   name:'Documentation',                              start:'2026-01-19', end:'2026-03-23', status:'In Progress', isStep:true  },
-  { id:'crm3', stream:'CRM',      step:'3',   name:'Developing interfaces & migration prep',     start:'2026-03-30', end:'2026-10-26', status:'Not started', isStep:true  },
-  { id:'crm4', stream:'CRM',      step:'4',   name:'Setting-up the platform',                    start:'2026-03-30', end:'2026-10-26', status:'Not started', isStep:true  },
-  { id:'crm5', stream:'CRM',      step:'5',   name:'Importing data',                             start:'2026-03-30', end:'2027-01-25', status:'Not started', isStep:true  },
-  { id:'crm6', stream:'CRM',      step:'6',   name:'Continuous testing',                         start:'2026-05-04', end:'2026-10-26', status:'Not started', isStep:true  },
-  { id:'crm7', stream:'CRM',      step:'7',   name:'Formations',                                 start:'2026-11-02', end:'2027-01-25', status:'Not started', isStep:true  },
-  { id:'crm8', stream:'CRM',      step:'8',   name:'Hyper-Care adjustments',                     start:'2027-02-01', end:'2027-03-22', status:'Not started', isStep:true  },
+  // ── Data Hub ──
+  { id:'dh1',   stream:'Data Hub', step:'1',   name:'Audit of existing | Workshops, interviews & interaction mapping', start:'2026-01-12', end:'2026-03-09', status:'In Progress', isStep:true  },
+  { id:'dh1.1', stream:'Data Hub', step:'1.1', name:'Document collection and analysis',         start:'2026-01-12', end:'2026-01-26', status:'Done',        isStep:false },
+  { id:'dh1.2', stream:'Data Hub', step:'1.2', name:'Interaction mapping',                      start:'2026-02-02', end:'2026-02-16', status:'Done',        isStep:false },
+  { id:'dh1.3', stream:'Data Hub', step:'1.3', name:'Business interviews',                      start:'2026-01-26', end:'2026-02-09', status:'Done',        isStep:false },
+  { id:'dh1.4', stream:'Data Hub', step:'1.4', name:'Synthesis of business interviews',         start:'2026-02-09', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'dh2',   stream:'Data Hub', step:'2',   name:'Target definition | Target architecture, migration & urbanization strategy', start:'2026-02-09', end:'2026-03-30', status:'In Progress', isStep:true  },
+  { id:'dh2.1', stream:'Data Hub', step:'2.1', name:'Co-construction of target architecture',   start:'2026-02-16', end:'2026-03-23', status:'In Progress', isStep:false },
+  { id:'dh2.2', stream:'Data Hub', step:'2.2', name:'Construction of urbanization strategy',    start:'2026-02-09', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'dh2.3', stream:'Data Hub', step:'2.3', name:'Definition of migration strategy',         start:'2026-02-09', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'dh2.4', stream:'Data Hub', step:'2.4', name:'Deployment strategy definition',           start:'2026-03-16', end:'2026-03-30', status:'Not started', isStep:false },
+  { id:'dh3',   stream:'Data Hub', step:'3',   name:'Roadmap definition | Budget / cost-estimations, 2-years roadmap & action plan', start:'2026-03-16', end:'2026-03-30', status:'Not started', isStep:true  },
+  { id:'dh4',   stream:'Data Hub', step:'4',   name:'Data governance | Strategy & governance plan', start:'2026-02-09', end:'2026-03-30', status:'In Progress', isStep:true  },
+  { id:'dh4.1', stream:'Data Hub', step:'4.1', name:'Data governance strategy definition',      start:'2026-02-09', end:'2026-03-16', status:'In Progress', isStep:false },
+  { id:'dh4.2', stream:'Data Hub', step:'4.2', name:'Governance plan definition',               start:'2026-03-16', end:'2026-03-30', status:'Not started', isStep:false },
+  { id:'dh5',   stream:'Data Hub', step:'5',   name:'Platform set-up [PMI]',                    start:'2026-06-08', end:'2026-08-17', status:'Not started', isStep:true  },
+  { id:'dh6',   stream:'Data Hub', step:'6',   name:'Data ingestion | High-priority build [PMI – Batch#1]', start:'2026-08-17', end:'2026-11-09', status:'Not started', isStep:true  },
+  { id:'dh7',   stream:'Data Hub', step:'7',   name:'Data ingestion | High-priority test & hypercare [PMI – Batch#1]', start:'2026-11-09', end:'2027-01-26', status:'Not started', isStep:true  },
+  // ── iPaaS ──
+  { id:'ip1',   stream:'iPaaS', step:'1',   name:'Pilot flows – Simple & Medium | Identification, documentation & development', start:'2026-01-19', end:'2026-03-30', status:'In Progress', isStep:true  },
+  { id:'ip1.1', stream:'iPaaS', step:'1.1', name:'Identification of 3 pilot dataflows',        start:'2026-01-19', end:'2026-01-26', status:'Done',        isStep:false },
+  { id:'ip1.2', stream:'iPaaS', step:'1.2', name:'Conception of the 3 pilot dataflows',        start:'2026-02-02', end:'2026-02-16', status:'Done',        isStep:false },
+  { id:'ip1.3', stream:'iPaaS', step:'1.3', name:'Development of simple & medium flows',       start:'2026-02-23', end:'2026-03-30', status:'In Progress', isStep:false },
+  { id:'ip2',   stream:'iPaaS', step:'2',   name:'Pilot flows – Complex | Identification, documentation & development [+TBD PMI]', start:'2026-02-23', end:'2026-03-30', status:'In Progress', isStep:true  },
+  { id:'ip3',   stream:'iPaaS', step:'3',   name:'Backlog | Identification of dataflows, documentation & prioritization [+TBD PMI]', start:'2026-02-23', end:'2026-03-30', status:'Not started', isStep:true  },
+  { id:'ip4',   stream:'iPaaS', step:'4',   name:'Platform set-up',                            start:'2026-02-09', end:'2026-03-09', status:'In Progress', isStep:true  },
+  { id:'ip5',   stream:'iPaaS', step:'5',   name:'Platform on-boarding | Workshops [TBC – 3 days]', start:'2026-02-23', end:'2026-03-16', status:'In Progress', isStep:true  },
+  // ── CRM ──
+  { id:'crm1',  stream:'CRM', step:'1',   name:'Scoping | Workshops',                          start:'2025-12-01', end:'2026-03-09', status:'In Progress', isStep:true  },
+  { id:'crm1.1',stream:'CRM', step:'1.1', name:'Scoping workshops',                            start:'2025-12-01', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'crm1.2',stream:'CRM', step:'1.2', name:'Data model definition',                        start:'2025-12-01', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'crm1.3',stream:'CRM', step:'1.3', name:'Business process definition',                  start:'2025-12-01', end:'2026-03-09', status:'In Progress', isStep:false },
+  { id:'crm2',  stream:'CRM', step:'2',   name:'Scoping | Detailing documentation',            start:'2026-01-19', end:'2026-03-30', status:'In Progress', isStep:true  },
+  { id:'crm3',  stream:'CRM', step:'3',   name:'Development | Interfaces and migration preparation', start:'2026-04-13', end:'2026-10-26', status:'Not started', isStep:true  },
+  { id:'crm4',  stream:'CRM', step:'4',   name:'Platform set-up',                              start:'2026-04-13', end:'2026-09-07', status:'Not started', isStep:true  },
+  { id:'crm5',  stream:'CRM', step:'5',   name:'Importing data',                               start:'2026-04-13', end:'2026-09-07', status:'Not started', isStep:true  },
+  { id:'crm6',  stream:'CRM', step:'6',   name:'Continuous testing',                           start:'2026-06-01', end:'2026-10-26', status:'Not started', isStep:true  },
 ];
 
 // ─── Helpers ───
@@ -345,6 +335,9 @@ export default function App() {
   const deleteTask = (stream: Stream, id: string) => save({ ...data, tasks: { ...data.tasks, [stream]: data.tasks[stream].filter(t => t.id !== id) } });
   const addDecision = (stream: Stream, dec: Omit<Decision, 'id'>) => save({ ...data, decisions: { ...data.decisions, [stream]: [...(data.decisions[stream] || []), { id: uid(), ...dec }] } });
   const deleteDecision = (stream: Stream, id: string) => save({ ...data, decisions: { ...data.decisions, [stream]: data.decisions[stream].filter(d => d.id !== id) } });
+  const updateDecision = (stream: Stream, id: string, updates: Partial<Decision>) => save({ ...data, decisions: { ...data.decisions, [stream]: data.decisions[stream].map(d => d.id === id ? { ...d, ...updates } : d) } });
+  const updateStreamItem = (stream: Stream, key: 'toBeDiscussed' | 'potentialRisks', id: string, updates: Partial<StreamItem>) => { const si = { ...(data.streamItems[stream] || { toBeDiscussed: [], potentialRisks: [] }) }; si[key] = si[key].map(i => i.id === id ? { ...i, ...updates } : i); save({ ...data, streamItems: { ...data.streamItems, [stream]: si } }); };
+  const updateControlTower = (key: 'askVattenfall' | 'keyMessages', id: string, updates: Partial<StreamItem>) => save({ ...data, controlTower: { ...data.controlTower, [key]: data.controlTower[key].map(i => i.id === id ? { ...i, ...updates } : i) } });
   const addMeeting = (stream: Stream, m: Omit<MeetingNote, 'id'>) => save({ ...data, meetings: { ...data.meetings, [stream]: [...(data.meetings[stream] || []), { id: uid(), ...m }] } });
   const updateMeeting = (stream: Stream, id: string, updates: Partial<MeetingNote>) => save({ ...data, meetings: { ...data.meetings, [stream]: (data.meetings[stream] || []).map(m => m.id === id ? { ...m, ...updates } : m) } });
   const deleteMeeting = (stream: Stream, id: string) => save({ ...data, meetings: { ...data.meetings, [stream]: (data.meetings[stream] || []).filter(m => m.id !== id) } });
@@ -609,7 +602,10 @@ export default function App() {
 
   // ─── Decisions ───
   const DecisionsList = ({ stream }: { stream: Stream }) => {
-    const [show, setShow] = useState(false); const [form, setForm] = useState({ name: '', date: todayStr(), owner: '', description: '' });
+    const [show, setShow] = useState(false);
+    const [form, setForm] = useState({ name: '', date: todayStr(), owner: '', description: '', decided: false });
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<Partial<Decision>>({});
     const decisions = data.decisions[stream] || [];
     return (
       <div className="card" style={{ marginBottom: 12 }}>
@@ -618,69 +614,157 @@ export default function App() {
           <input className="ni" placeholder="Decision name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <input className="ni-date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
-            <div />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.decided} onChange={e => setForm({ ...form, decided: e.target.checked })} />
+              Decision taken
+            </label>
           </div>
           <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>Owner</div>
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
+          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 60, resize: 'vertical' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button className="bp" onClick={() => { if (form.name.trim()) { addDecision(stream, form); setForm({ name: '', date: todayStr(), owner: '', description: '' }); setShow(false); } }}>Save</button>
+            <button className="bp" onClick={() => { if (form.name.trim()) { addDecision(stream, form); setForm({ name: '', date: todayStr(), owner: '', description: '', decided: false }); setShow(false); } }}>Save</button>
           </div>
         </div>}
         {decisions.length === 0 ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>No decisions yet</div> : decisions.map(d => (
-          <div key={d.id} style={{ padding: '11px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-            <div><div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{d.name}</div><div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtDate(d.date)}{d.owner ? ` · ${d.owner}` : ''}</div></div>
-            <DelBtn onClick={() => deleteDecision(stream, d.id)} />
+          <div key={d.id} style={{ borderTop: `1px solid ${C.border}` }}>
+            {editId === d.id ? (
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, background: C.sectionBg }}>
+                <input className="ni" value={editForm.name || ''} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input className="ni-date" type="date" value={editForm.date || ''} onChange={e => setEditForm({ ...editForm, date: e.target.value })} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!editForm.decided} onChange={e => setEditForm({ ...editForm, decided: e.target.checked })} />
+                    Decision taken
+                  </label>
+                </div>
+                <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
+                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 60, resize: 'vertical' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
+                  <button className="bp" onClick={() => { updateDecision(stream, d.id, editForm); setEditId(null); }}>Save</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '11px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: d.decided ? '#34c75918' : '#ff9f0a18', color: d.decided ? '#34c759' : '#ff9f0a', whiteSpace: 'nowrap' }}>
+                      {d.decided ? '✅ Decided' : '⏳ Pending'}
+                    </span>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{d.name}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>{fmtDate(d.date)}{d.owner ? ` · ${d.owner}` : ''}</div>
+                  {d.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{d.description}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => { setEditId(d.id); setEditForm(d); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }} title="Edit">✏️</button>
+                  <DelBtn onClick={() => deleteDecision(stream, d.id)} />
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
     );
   };
 
-  // ─── Generic Stream Item Box ───
+  // ─── Generic Stream Item Box (editable) ───
   const StreamItemBox = ({ stream, storageKey, title, icon, color }: { stream: Stream; storageKey: 'toBeDiscussed' | 'potentialRisks'; title: string; icon: string; color: string }) => {
-    const [show, setShow] = useState(false); const [form, setForm] = useState({ title: '', owner: '', dueDate: '', description: '' });
+    const [show, setShow] = useState(false);
+    const [form, setForm] = useState({ title: '', owner: '', dueDate: '', description: '' });
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<Partial<StreamItem>>({});
     const items = (data.streamItems[stream]?.[storageKey]) || [];
     return (
       <div className="card" style={{ marginBottom: 12 }}>
         <CardHeader title={`${icon} ${title}`} color={color} action={<button className="bg" onClick={() => setShow(!show)}>{show ? 'Cancel' : '+ Add'}</button>} />
         {show && <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input className="ni" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>Owner</div>
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
           <input className="ni-date" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
+          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button className="bp" onClick={() => { if (form.title.trim()) { addStreamItem(stream, storageKey, form); setForm({ title: '', owner: '', dueDate: '', description: '' }); setShow(false); } }}>Save</button>
           </div>
         </div>}
         {items.length === 0 ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>Nothing yet</div> : items.map(item => (
-          <div key={item.id} style={{ padding: '11px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-            <div><div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>{item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}{item.dueDate ? ` · ${fmtDate(item.dueDate)}` : ''}</div>}</div>
-            <DelBtn onClick={() => deleteStreamItem(stream, storageKey, item.id)} />
+          <div key={item.id} style={{ borderTop: `1px solid ${C.border}` }}>
+            {editId === item.id ? (
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, background: C.sectionBg }}>
+                <input className="ni" value={editForm.title || ''} onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
+                <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
+                <input className="ni-date" type="date" value={editForm.dueDate || ''} onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })} />
+                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
+                  <button className="bp" onClick={() => { updateStreamItem(stream, storageKey, item.id, editForm); setEditId(null); }}>Save</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '11px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>
+                  {item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}{item.dueDate ? ` · ${fmtDate(item.dueDate)}` : ''}</div>}
+                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{item.description}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => { setEditId(item.id); setEditForm(item); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }}>✏️</button>
+                  <DelBtn onClick={() => deleteStreamItem(stream, storageKey, item.id)} />
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
     );
   };
 
-  // ─── Control Tower Item Box ───
+  // ─── Control Tower Item Box (editable) ───
   const ControlTowerBox = ({ storageKey, title, icon, color }: { storageKey: 'askVattenfall' | 'keyMessages'; title: string; icon: string; color: string }) => {
-    const [show, setShow] = useState(false); const [form, setForm] = useState({ title: '', owner: '', dueDate: '', description: '' });
+    const [show, setShow] = useState(false);
+    const [form, setForm] = useState({ title: '', owner: '', dueDate: '', description: '' });
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<Partial<StreamItem>>({});
     const items = data.controlTower[storageKey] || [];
     return (
       <div className="card" style={{ marginBottom: 12 }}>
         <CardHeader title={`${icon} ${title}`} color={color} action={<button className="bg" onClick={() => setShow(!show)}>{show ? 'Cancel' : '+ Add'}</button>} />
         {show && <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input className="ni" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>Owner</div>
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
+          <input className="ni-date" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
+          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button className="bp" onClick={() => { if (form.title.trim()) { addControlTower(storageKey, form); setForm({ title: '', owner: '', dueDate: '', description: '' }); setShow(false); } }}>Save</button>
           </div>
         </div>}
         {items.length === 0 ? <div style={{ padding: '13px 16px', fontSize: 13, color: C.textDim }}>Nothing yet</div> : items.map(item => (
-          <div key={item.id} style={{ padding: '11px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-            <div><div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>{item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}</div>}</div>
-            <DelBtn onClick={() => deleteControlTower(storageKey, item.id)} />
+          <div key={item.id} style={{ borderTop: `1px solid ${C.border}` }}>
+            {editId === item.id ? (
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, background: C.sectionBg }}>
+                <input className="ni" value={editForm.title || ''} onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
+                <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
+                <input className="ni-date" type="date" value={editForm.dueDate || ''} onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })} />
+                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
+                  <button className="bp" onClick={() => { updateControlTower(storageKey, item.id, editForm); setEditId(null); }}>Save</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '11px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>
+                  {item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}{item.dueDate ? ` · ${fmtDate(item.dueDate)}` : ''}</div>}
+                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{item.description}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => { setEditId(item.id); setEditForm(item); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }}>✏️</button>
+                  <DelBtn onClick={() => deleteControlTower(storageKey, item.id)} />
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
