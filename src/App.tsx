@@ -630,6 +630,8 @@ export default function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: C.text, marginBottom: 7, lineHeight: 1.4, flex: 1 }}>{task.title}</div>
           <button
+            data-no-drag="true"
+            onMouseDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); setShowConvert(v => !v); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: C.textDim, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
             title="Convert / move">⇄</button>
@@ -725,7 +727,9 @@ export default function App() {
               </div>
               <div style={{ padding: 8, minHeight: 80 }}>
                 {col.map(t => (
-                  <div key={t.id} draggable onDragStart={() => handleDragStart(t.id)} onDragEnd={handleDragEnd}
+                  <div key={t.id} draggable
+                    onDragStart={e => { if ((e.target as HTMLElement).closest('[data-no-drag]')) { e.preventDefault(); return; } handleDragStart(t.id); }}
+                    onDragEnd={handleDragEnd}
                     style={{ opacity: dragId === t.id ? 0.4 : 1, cursor: 'grab' }}>
                     <TaskCard task={t} stream={stream} />
                   </div>
@@ -741,7 +745,9 @@ export default function App() {
                     {showOldDone && (
                       <div style={{ marginTop: 4, opacity: 0.65 }}>
                         {oldDone.map(t => (
-                          <div key={t.id} draggable onDragStart={() => handleDragStart(t.id)} onDragEnd={handleDragEnd}
+                          <div key={t.id} draggable
+                            onDragStart={e => { if ((e.target as HTMLElement).closest('[data-no-drag]')) { e.preventDefault(); return; } handleDragStart(t.id); }}
+                            onDragEnd={handleDragEnd}
                             style={{ opacity: dragId === t.id ? 0.4 : 1, cursor: 'grab' }}>
                             <TaskCard task={t} stream={stream} />
                           </div>
