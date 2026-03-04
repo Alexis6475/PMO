@@ -192,7 +192,7 @@ const OwnerSelect = ({ value, onChange }: { value: string; onChange: (v: string)
 };
 
 // ─── Rich Text Editor ───
-const RichEditor = ({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) => {
+const RichEditor = ({ value, onChange, placeholder, minHeight = 300 }: { value: string; onChange: (v: string) => void; placeholder?: string; minHeight?: number }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [boldActive, setBoldActive] = useState(false);
   const [italicActive, setItalicActive] = useState(false);
@@ -205,28 +205,25 @@ const RichEditor = ({ value, onChange, placeholder }: { value: string; onChange:
   const updateState = () => { setBoldActive(document.queryCommandState('bold')); setItalicActive(document.queryCommandState('italic')); };
 
   return (
-    <div style={{ border: '1px solid #d1d1d6', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-      <div className="editor-toolbar" style={{ padding: '8px 12px', borderBottom: '1px solid #e5e5ea', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button className={boldActive ? 'active' : ''} onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Bold"><b>B</b></button>
-        <button className={italicActive ? 'active' : ''} onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Italic"><i>I</i></button>
-        <button onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Underline"><u>U</u></button>
-        <div style={{ width: 1, height: 18, background: '#e5e5ea', margin: '0 4px' }} />
-        <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Bullet list">• List</button>
-        <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Numbered list">1. List</button>
-        <div style={{ width: 1, height: 18, background: '#e5e5ea', margin: '0 4px' }} />
-        <button onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'h2'); }} title="Heading" style={{ fontWeight: 700 }}>H</button>
-        <button onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'p'); }} title="Paragraph">¶</button>
-        <div style={{ width: 1, height: 18, background: '#e5e5ea', margin: '0 4px' }} />
-        <button onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title="Clear format" style={{ fontSize: 11 }}>Clear</button>
+    <div style={{ border: '1px solid #d1d1d6', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+      <div className="editor-toolbar" style={{ padding: '5px 8px', borderBottom: '1px solid #e5e5ea', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', background: '#fafafa' }}>
+        <button className={boldActive ? 'active' : ''} onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Bold" style={{ fontSize: 12, padding: '2px 6px' }}><b>B</b></button>
+        <button className={italicActive ? 'active' : ''} onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Italic" style={{ fontSize: 12, padding: '2px 6px' }}><i>I</i></button>
+        <button onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Underline" style={{ fontSize: 12, padding: '2px 6px' }}><u>U</u></button>
+        <div style={{ width: 1, height: 14, background: '#e5e5ea', margin: '0 3px' }} />
+        <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Bullet list" style={{ fontSize: 11, padding: '2px 6px' }}>• List</button>
+        <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Numbered list" style={{ fontSize: 11, padding: '2px 6px' }}>1. List</button>
+        <div style={{ width: 1, height: 14, background: '#e5e5ea', margin: '0 3px' }} />
+        <button onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title="Clear format" style={{ fontSize: 10, padding: '2px 6px', color: C.textDim }}>Clear</button>
       </div>
       <div
         ref={ref}
         contentEditable
-        data-placeholder={placeholder || 'Write meeting notes…'}
+        data-placeholder={placeholder || 'Write notes…'}
         onInput={() => { onChange(ref.current?.innerHTML || ''); updateState(); }}
         onKeyUp={updateState}
         onMouseUp={updateState}
-        style={{ padding: '16px', minHeight: 300, fontSize: 14, lineHeight: 1.7, color: C.text, overflowY: 'auto', textAlign: 'left' }}
+        style={{ padding: '10px 12px', minHeight, fontSize: 13, lineHeight: 1.7, color: C.text, overflowY: 'auto', textAlign: 'left' }}
       />
     </div>
   );
@@ -621,7 +618,7 @@ export default function App() {
           </div>
           <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>Owner</div>
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
-          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 60, resize: 'vertical' }} />
+          <RichEditor value={form.description} onChange={v => setForm({ ...form, description: v })} placeholder="Description (optional)" minHeight={80} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="bp" onClick={() => { if (form.name.trim()) { addDecision(stream, form); setForm({ name: '', date: todayStr(), owner: '', description: '', decided: false }); setShow(false); } }}>Save</button>
           </div>
@@ -639,7 +636,7 @@ export default function App() {
                   </label>
                 </div>
                 <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
-                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 60, resize: 'vertical' }} />
+                <RichEditor value={editForm.description || ''} onChange={v => setEditForm({ ...editForm, description: v })} placeholder="Description…" minHeight={80} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
                   <button className="bp" onClick={() => { updateDecision(stream, d.id, editForm); setEditId(null); }}>Save</button>
@@ -655,7 +652,7 @@ export default function App() {
                     <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{d.name}</div>
                   </div>
                   <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>{fmtDate(d.date)}{d.owner ? ` · ${d.owner}` : ''}</div>
-                  {d.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{d.description}</div>}
+                  {d.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }} dangerouslySetInnerHTML={{ __html: d.description }} />}
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   <button onClick={() => { setEditId(d.id); setEditForm(d); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }} title="Edit">✏️</button>
@@ -683,7 +680,7 @@ export default function App() {
           <input className="ni" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
           <input className="ni-date" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
-          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+          <RichEditor value={form.description} onChange={v => setForm({ ...form, description: v })} placeholder="Description (optional)" minHeight={70} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button className="bp" onClick={() => { if (form.title.trim()) { addStreamItem(stream, storageKey, form); setForm({ title: '', owner: '', dueDate: '', description: '' }); setShow(false); } }}>Save</button>
           </div>
@@ -695,7 +692,7 @@ export default function App() {
                 <input className="ni" value={editForm.title || ''} onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
                 <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
                 <input className="ni-date" type="date" value={editForm.dueDate || ''} onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })} />
-                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+                <RichEditor value={editForm.description || ''} onChange={v => setEditForm({ ...editForm, description: v })} placeholder="Description…" minHeight={70} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
                   <button className="bp" onClick={() => { updateStreamItem(stream, storageKey, item.id, editForm); setEditId(null); }}>Save</button>
@@ -706,7 +703,7 @@ export default function App() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>
                   {item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}{item.dueDate ? ` · ${fmtDate(item.dueDate)}` : ''}</div>}
-                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{item.description}</div>}
+                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   <button onClick={() => { setEditId(item.id); setEditForm(item); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }}>✏️</button>
@@ -734,7 +731,7 @@ export default function App() {
           <input className="ni" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
           <OwnerSelect value={form.owner} onChange={v => setForm({ ...form, owner: v })} />
           <input className="ni-date" type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
-          <textarea className="ni" placeholder="Description (optional)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+          <RichEditor value={form.description} onChange={v => setForm({ ...form, description: v })} placeholder="Description (optional)" minHeight={70} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button className="bp" onClick={() => { if (form.title.trim()) { addControlTower(storageKey, form); setForm({ title: '', owner: '', dueDate: '', description: '' }); setShow(false); } }}>Save</button>
           </div>
@@ -746,7 +743,7 @@ export default function App() {
                 <input className="ni" value={editForm.title || ''} onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
                 <OwnerSelect value={editForm.owner || ''} onChange={v => setEditForm({ ...editForm, owner: v })} />
                 <input className="ni-date" type="date" value={editForm.dueDate || ''} onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })} />
-                <textarea className="ni" value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ minHeight: 52, resize: 'vertical' }} />
+                <RichEditor value={editForm.description || ''} onChange={v => setEditForm({ ...editForm, description: v })} placeholder="Description…" minHeight={70} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button className="bg" onClick={() => setEditId(null)}>Cancel</button>
                   <button className="bp" onClick={() => { updateControlTower(storageKey, item.id, editForm); setEditId(null); }}>Save</button>
@@ -757,7 +754,7 @@ export default function App() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{item.title}</div>
                   {item.owner && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{item.owner}{item.dueDate ? ` · ${fmtDate(item.dueDate)}` : ''}</div>}
-                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{item.description}</div>}
+                  {item.description && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }} dangerouslySetInnerHTML={{ __html: item.description }} />}
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   <button onClick={() => { setEditId(item.id); setEditForm(item); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: C.textDim, padding: '0 4px' }}>✏️</button>
