@@ -1844,39 +1844,49 @@ export default function App() {
     const toggleHide = (key: string) => setHiddenItems(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
     // Next Thursday = the coming presentation Thursday (today if today IS Thursday)
-    // Use local date helper to avoid UTC timezone shift (Paris = UTC+1)
+    // Local date helper — avoids UTC timezone shift (Paris = UTC+1)
     const localDateStr = (d: Date) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day2 = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day2}`;
+      const dy = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dy}`;
     };
     const addDays = (dateStr: string, n: number) => {
-      const d = new Date(dateStr + 'T12:00:00'); // noon = safe from DST shifts
+      const d = new Date(dateStr + 'T12:00:00');
       d.setDate(d.getDate() + n);
       return localDateStr(d);
     };
     const todaySlide = localDateStr(new Date());
-    // Next Thursday = coming presentation (today if today IS Thursday)
+    // Next Thursday = the coming presentation date (today if today IS Thursday)
     const nextThursday = (() => {
-      const d = new Date();
-      const dow = d.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+      const dow = new Date().getDay();
       const daysAhead = dow === 4 ? 0 : (4 - dow + 7) % 7;
       return addDays(todaySlide, daysAhead);
     })();
-    // Last Thursday = 7 days before next Thursday = previous presentation
+    // Last Thursday = previous presentation (7 days before)
     const lastThursday = addDays(nextThursday, -7);
-    // Thursday before that = start of past-week window
-    const prevThursday = addDays(lastThursday, -7);
 
-    // Past week = Done tasks with dueDate since lastThursday (26 Feb) up to today (4 Mar)
-    const doneTasks = tasks.filter(t =>
-      t.status === 'Done' && t.dueDate && t.dueDate >= lastThursday && t.dueDate <= todaySlide
-    );
-    // Coming week = not Done, due date from today up to and including next Thursday
-    const upcomingTasks = [...tasks.filter(t =>
-      t.status !== 'Done' && t.dueDate && t.dueDate >= todaySlide && t.dueDate <= nextThursday
-    )].sort((a, b) => ['P0','P1','P2',''].indexOf(a.priority) - ['P0','P1','P2',''].indexOf(b.priority));
+    // DATE shown in header = next Thursday (the slide presentation date)
+    const slideDate = nextThursday;
+
+    // Past week = Done tasks with completedAt (or dueDate) >= lastThursday
+    const doneTasks = tasks.filter(t => {
+      if (t.status !== 'Done') return false;
+      const ref = t.completedAt || t.dueDate || '';
+      return ref >= lastThursday;
+    });
+
+    // Coming week = ALL non-Done tasks regardless of date, sorted P0→P1→P2→no priority, then by dueDate
+    const upcomingTasks = [...tasks.filter(t => t.status !== 'Done')]
+      .sort((a, b) => {
+        const pOrder = ['P0','P1','P2',''];
+        const pDiff = pOrder.indexOf(a.priority) - pOrder.indexOf(b.priority);
+        if (pDiff !== 0) return pDiff;
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
 
     const risks = items.potentialRisks;
     const toDiscuss = items.toBeDiscussed;
@@ -1912,7 +1922,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: '#f7f7f7' }}>
           <div style={{ padding: '10px 16px', borderRight: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{new Date(slideDate + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
           </div>
           <div style={{ padding: '10px 16px', borderRight: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.5px' }}>Status (SK eval.)</div>
@@ -1961,10 +1971,10 @@ export default function App() {
           <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, minHeight: 160 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 10 }}>
               📅 Activities in the coming week
-              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>today → {fmtDate(nextThursday)}</span>
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400, marginLeft: 6 }}>all open tasks · {upcomingTasks.length} total</span>
             </div>
             {upcomingTasks.length === 0
-              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No upcoming tasks with a due date before next Thursday.</div>
+              ? <div style={{ fontSize: 12, color: C.textDim, fontStyle: 'italic' }}>No open tasks — add tasks in the Kanban.</div>
               : upcomingTasks.map(t => {
                   const hidden = hiddenItems.has('up-' + t.id);
                   return (
